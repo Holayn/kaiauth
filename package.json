@@ -1,0 +1,13 @@
+{
+  "name": "kaiauth",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": ">=9",
+    "connect-sqlite3": "^0.9.13",
+    "express": "^4.17.0",
+    "express-session": "^1.17.3"
+  }
+}
