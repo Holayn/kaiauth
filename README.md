@@ -59,7 +59,7 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 | -------------------- | -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
 | `sessionSecret`      | `string`                   | Yes      | Secret for signing the session cookie.                                                                       |
 | `buildCookieOptions` | `(extra?) => object`       | Yes      | Builds cookie options for all auth cookies (session, 2FA key, bypass token).                                 |
-| `notify`             | `(message, user?) => void` | Yes      | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, user.notifyUser)` where `user` is the object from `UserStore.authenticate()`. |
+| `notify`             | `(message, user?) => void` | Yes      | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)`.        |
 | `dbPath`             | `string`                   | No       | Path to the auth SQLite database (default `'./auth.db'`).                                                    |
 | `sessionDbPath`      | `string`                   | No       | Path to the session SQLite database (default `'./sessions.db'`).                                             |
 
