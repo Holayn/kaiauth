@@ -1,16 +1,17 @@
 # kaiauth
 
-Drop-in Express router for username/password authentication with two-factor authentication (2FA), rate limiting, and SQLite-backed sessions.
+Drop-in Express router for username/password authentication with optional two-factor authentication (2FA), rate limiting, and SQLite-backed sessions.
 
-kaiauth creates and owns its own SQLite database — it manages user accounts, 2FA bypass tokens, and sessions.
+kaiauth creates and owns its own SQLite database — it manages user accounts, sessions, and (when 2FA is enabled) bypass tokens.
 
 ## Features
 
-- **Login with 2FA** — credential check → 2FA code challenge → session creation
-- **2FA bypass tokens** — remember trusted devices so users skip 2FA on repeat logins
+- **Flexible login flow** — credential check → optional 2FA code challenge → session creation
+- **Optional 2FA** — disable with `enable2fa: false` for a simple username/password flow
+- **2FA bypass tokens** — remember trusted devices so users skip 2FA on repeat logins (when 2FA is enabled)
 - **Rate limiting** — in-memory per-user lockout after configurable failed attempts
 - **Timing-safe** — random delay on failure and constant-time code comparison
-- **Own SQLite database** — manages `user` and `twofa_bypass_token` tables internally
+- **Own SQLite database** — manages `user` and (when 2FA is enabled) `twofa_bypass_token` tables internally
 - **SQLite sessions** — uses `connect-sqlite3` for persistent session storage
 - **Bcrypt passwords** — with automatic migration from legacy SHA-256 hashes
 
@@ -55,38 +56,39 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 
 #### Options
 
-| Option               | Type                       | Required | Description                                                                                                  |
-| -------------------- | -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `sessionSecret`      | `string`                   | Yes      | Secret for signing the session cookie.                                                                       |
-| `buildCookieOptions` | `(extra?) => object`       | Yes      | Builds cookie options for all auth cookies (session, 2FA key, bypass token).                                 |
-| `notify`             | `(message, user?) => void` | Yes      | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)`.        |
-| `dbPath`             | `string`                   | No       | Path to the auth SQLite database (default `'./auth.db'`).                                                    |
-| `sessionDbPath`      | `string`                   | No       | Path to the session SQLite database (default `'./sessions.db'`).                                             |
+| Option               | Type                       | Required | Default          | Description                                                                                                                                    |
+| -------------------- | -------------------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessionSecret`      | `string`                   | Yes      | —                | Secret for signing the session cookie.                                                                                                         |
+| `buildCookieOptions` | `(extra?) => object`       | Yes      | —                | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                               |
+| `notify`             | `(message, user?) => void` | Yes      | —                | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)` so the code can be delivered to the user. |
+| `dbPath`             | `string`                   | No       | `'./auth.db'`    | Path to the auth SQLite database.                                                                                                              |
+| `sessionDbPath`      | `string`                   | No       | `'./sessions.db'`| Path to the session SQLite database.                                                                                                           |
+| `enable2fa`          | `boolean`                  | No       | `true`           | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa` and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned. |
 
 #### Return Value
 
-| Property           | Type               | Description                                                                  |
-| ------------------ | ------------------ | ---------------------------------------------------------------------------- |
-| `router`           | `express.Router`   | Mount with `app.use(router)`.                                                |
-| `requireAuth`      | `Function`         | Middleware that rejects unauthenticated requests with 401.                   |
-| `loginService`     | `LoginService`     | The underlying login service instance.                                       |
-| `sessionStore`     | `object`           | The `connect-sqlite3` session store.                                         |
-| `bypassTokenStore` | `BypassTokenStore` | Direct access to bypass token persistence.                                   |
-| `userStore`        | `UserStore`        | Direct access to user persistence (insert, authenticate, etc.). |
-| `db`               | `Database`         | The raw `better-sqlite3` database instance.                                  |
+| Property           | Type               | Description                                                                                          |
+| ------------------ | ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `router`           | `express.Router`   | Mount with `app.use(router)`.                                                                        |
+| `requireAuth`      | `Function`         | Middleware that rejects unauthenticated requests with 401.                                           |
+| `loginService`     | `LoginService`     | The underlying login service instance.                                                               |
+| `sessionStore`     | `object`           | The `connect-sqlite3` session store.                                                                 |
+| `bypassTokenStore` | `BypassTokenStore` | Direct access to bypass token persistence. Only present when `enable2fa` is `true` (the default).   |
+| `userStore`        | `UserStore`        | Direct access to user persistence (insert, authenticate, etc.).                                      |
+| `db`               | `Database`         | The raw `better-sqlite3` database instance.                                                          |
 
 ### Routes
 
 All routes are mounted under `/auth`:
 
-| Method | Path                            | Auth | Body                     | Description                                                                  |
-| ------ | ------------------------------- | ---- | ------------------------ | ---------------------------------------------------------------------------- |
-| POST   | `/auth`                         | No   | `{ username, password }` | Login — validates credentials, returns `{ twoFA: true }` if 2FA is required. |
-| POST   | `/auth/2fa`                     | No   | `{ twoFACode }`          | Verify 2FA code and create session.                                          |
-| POST   | `/auth/logout`                  | Yes  | —                        | Destroy the session.                                                         |
-| GET    | `/auth/verify`                  | Yes  | —                        | Verify & refresh an existing session.                                        |
-| POST   | `/auth/invalidate-all-sessions` | Yes  | —                        | Wipe all sessions and bypass tokens.                                         |
-| POST   | `/auth/revoke-2fa-bypass`       | Yes  | `{ username? }`          | Revoke 2FA bypass tokens (for one user or all).                              |
+| Method | Path                            | Auth | 2FA only | Body                     | Description                                                                                                    |
+| ------ | ------------------------------- | ---- | -------- | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| POST   | `/auth`                         | No   |          | `{ username, password }` | Login — validates credentials. With 2FA enabled, returns `{ twoFA: true }` if a code challenge is required; otherwise creates a session directly. |
+| POST   | `/auth/2fa`                     | No   | Yes      | `{ twoFACode }`          | Verify 2FA code and create session.                                                                            |
+| POST   | `/auth/logout`                  | Yes  |          | —                        | Destroy the session.                                                                                           |
+| GET    | `/auth/verify`                  | Yes  |          | —                        | Verify & refresh an existing session.                                                                          |
+| POST   | `/auth/invalidate-all-sessions` | Yes  |          | —                        | Wipe all sessions and, when 2FA is enabled, all bypass tokens.                                                 |
+| POST   | `/auth/revoke-2fa-bypass`       | Yes  | Yes      | `{ username? }`          | Revoke 2FA bypass tokens (for one user or all).                                                                |
 
 ### `UserStore`
 
