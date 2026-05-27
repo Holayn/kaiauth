@@ -1,15 +1,11 @@
 import express, { type Router, type RequestHandler, type CookieOptions } from 'express';
 import session from 'express-session';
 import Database from 'better-sqlite3';
-import connectSQLite3 from 'connect-sqlite3';
+import { SQLiteSessionStore } from './sqlite-session-store';
 import { LoginService } from './login';
 import { createLoginHandlers } from './login-handlers';
 import { BypassTokenStore } from './bypass-token-store';
 import { UserStore } from './user-store';
-
-const SQLiteStore = connectSQLite3(session);
-
-type SessionStore = session.Store & { db: any };
 
 function requiredBody(properties: string[]): RequestHandler {
   return (req, res, next) => {
@@ -36,7 +32,7 @@ export interface AuthRouterResult {
   router: Router;
   requireAuth: RequestHandler;
   loginService: LoginService;
-  sessionStore: SessionStore;
+  sessionStore: SQLiteSessionStore;
   bypassTokenStore?: BypassTokenStore;
   userStore: UserStore;
   db: InstanceType<typeof Database>;
@@ -75,7 +71,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     enable2fa,
   });
 
-  const sessionStore = new SQLiteStore({ db: sessionDbPath });
+  const sessionStore = new SQLiteSessionStore(new Database(sessionDbPath));
 
   const { auth, authTwoFa, logout, verify } = createLoginHandlers(loginService, {
     buildCookieOptions,
@@ -117,7 +113,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
   router.post('/auth/logout', requireAuth, logout);
   router.get('/auth/verify', requireAuth, verify);
   router.post('/auth/invalidate-all-sessions', requireAuth, (req, res) => {
-    sessionStore.db.prepare('DELETE FROM sessions').run();
+    sessionStore.deleteAll();
     if (enable2fa) {
       bypassTokenStore!.deleteAll();
     }
