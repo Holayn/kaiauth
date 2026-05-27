@@ -1,11 +1,7 @@
-const crypto = require('crypto');
+import crypto from 'crypto';
 
-function timingSafeCompare(a, b) {
+export function timingSafeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
-
-module.exports = {
-  timingSafeCompare,
-};
