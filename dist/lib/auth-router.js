@@ -7,6 +7,8 @@ exports.createAuthRouter = createAuthRouter;
 const express_1 = __importDefault(require("express"));
 const express_session_1 = __importDefault(require("express-session"));
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const sqlite_session_store_1 = require("./sqlite-session-store");
 const login_1 = require("./login");
 const login_handlers_1 = require("./login-handlers");
@@ -24,10 +26,17 @@ function requiredBody(properties) {
     };
 }
 function createAuthRouter(opts) {
-    const { dbPath = './auth.db', sessionSecret, sessionDbPath = './sessions.db', buildCookieOptions, notify, enable2fa = true, } = opts;
+    const { authDataDir, sessionSecret, buildCookieOptions, notify, enable2fa = true, } = opts;
+    if (!path_1.default.isAbsolute(authDataDir)) {
+        throw new Error('createAuthRouter requires an absolute path for authDataDir');
+    }
+    if (fs_1.default.existsSync(authDataDir) && !fs_1.default.statSync(authDataDir).isDirectory()) {
+        throw new Error('createAuthRouter authDataDir must be a directory');
+    }
     if (!notify)
         throw new Error('createAuthRouter requires a notify function');
-    const db = new better_sqlite3_1.default(dbPath);
+    fs_1.default.mkdirSync(authDataDir, { recursive: true });
+    const db = new better_sqlite3_1.default(path_1.default.join(authDataDir, 'auth.db'));
     const userStore = new user_store_1.UserStore(db);
     let bypassTokenStore;
     if (enable2fa) {
@@ -45,7 +54,7 @@ function createAuthRouter(opts) {
         }),
         enable2fa,
     });
-    const sessionStore = new sqlite_session_store_1.SQLiteSessionStore(new better_sqlite3_1.default(sessionDbPath));
+    const sessionStore = new sqlite_session_store_1.SQLiteSessionStore(new better_sqlite3_1.default(path_1.default.join(authDataDir, 'sessions.db')));
     const { auth, authTwoFa, logout, verify } = (0, login_handlers_1.createLoginHandlers)(loginService, {
         buildCookieOptions,
         notify,

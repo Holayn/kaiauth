@@ -5,9 +5,8 @@ import { LoginService } from './login';
 import { BypassTokenStore } from './bypass-token-store';
 import { UserStore } from './user-store';
 export interface AuthRouterOptions {
-    dbPath?: string;
+    authDataDir: string;
     sessionSecret: string;
-    sessionDbPath?: string;
     buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
     notify: (message: string, username?: string) => void;
     enable2fa?: boolean;
