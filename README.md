@@ -121,6 +121,28 @@ db.close();
 | `getByUsername(username)`         | Look up user by username (without password).                         |
 | `findAll()`                       | List all users (without passwords).                                  |
 
+### CLI
+
+kaiauth ships a `kaiauth` CLI for managing users directly against the auth database, without writing a script.
+
+```sh
+npx kaiauth <command> --db <path-to-auth.db>
+```
+
+| Command                                  | Description           |
+| ---------------------------------------- | --------------------- |
+| `add-user <username> <password> --db`    | Add a new user.       |
+| `list-users --db`                        | List all users.       |
+
+`add-user` exits non-zero if the username already exists.
+
+**Example**
+
+```sh
+npx kaiauth add-user alice hunter2 --db ./data/auth.db
+npx kaiauth list-users --db ./data/auth.db
+```
+
 ### `BypassTokenStore`
 
 Manages the `twofa_bypass_token` table. Available on the return value as `bypassTokenStore`.
