@@ -1,6 +1,8 @@
 import express, { type Router, type RequestHandler, type CookieOptions } from 'express';
 import session from 'express-session';
 import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
 import { SQLiteSessionStore } from './sqlite-session-store';
 import { LoginService } from './login';
 import { createLoginHandlers } from './login-handlers';
@@ -20,9 +22,8 @@ function requiredBody(properties: string[]): RequestHandler {
 }
 
 export interface AuthRouterOptions {
-  dbPath?: string;
+  authDataDir: string;
   sessionSecret: string;
-  sessionDbPath?: string;
   buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
   notify: (message: string, username?: string) => void;
   enable2fa?: boolean;
@@ -40,17 +41,24 @@ export interface AuthRouterResult {
 
 export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
   const {
-    dbPath = './auth.db',
+    authDataDir,
     sessionSecret,
-    sessionDbPath = './sessions.db',
     buildCookieOptions,
     notify,
     enable2fa = true,
   } = opts;
 
+  if (!path.isAbsolute(authDataDir)) {
+    throw new Error('createAuthRouter requires an absolute path for authDataDir');
+  }
+  if (fs.existsSync(authDataDir) && !fs.statSync(authDataDir).isDirectory()) {
+    throw new Error('createAuthRouter authDataDir must be a directory');
+  }
   if (!notify) throw new Error('createAuthRouter requires a notify function');
 
-  const db = new Database(dbPath);
+  fs.mkdirSync(authDataDir, { recursive: true });
+
+  const db = new Database(path.join(authDataDir, 'auth.db'));
   const userStore = new UserStore(db);
 
   let bypassTokenStore: BypassTokenStore | undefined;
@@ -71,7 +79,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     enable2fa,
   });
 
-  const sessionStore = new SQLiteSessionStore(new Database(sessionDbPath));
+  const sessionStore = new SQLiteSessionStore(new Database(path.join(authDataDir, 'sessions.db')));
 
   const { auth, authTwoFa, logout, verify } = createLoginHandlers(loginService, {
     buildCookieOptions,

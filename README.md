@@ -12,13 +12,14 @@ kaiauth creates and owns its own SQLite database — it manages user accounts, s
 - **Rate limiting** — in-memory per-user lockout after configurable failed attempts
 - **Timing-safe** — random delay on failure and constant-time code comparison
 - **Own SQLite database** — manages `user` and (when 2FA is enabled) `twofa_bypass_token` tables internally
-- **SQLite sessions** — uses `connect-sqlite3` for persistent session storage
+- **SQLite sessions** — persistent session storage backed by SQLite
 - **Bcrypt passwords** — with automatic migration from legacy SHA-256 hashes
 
 ## Quick Start
 
 ```js
 const express = require('express');
+const path = require('path');
 const { createAuthRouter } = require('kaiauth');
 
 const app = express();
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use(require('cookie-parser')());
 
 const { router, requireAuth, userStore } = createAuthRouter({
+  authDataDir: path.join(__dirname, 'data'),
   sessionSecret: 'your-secret',
   buildCookieOptions: (extra) => ({
     httpOnly: true,
@@ -56,14 +58,13 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 
 #### Options
 
-| Option               | Type                       | Required | Default          | Description                                                                                                                                    |
-| -------------------- | -------------------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sessionSecret`      | `string`                   | Yes      | —                | Secret for signing the session cookie.                                                                                                         |
-| `buildCookieOptions` | `(extra?) => object`       | Yes      | —                | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                               |
-| `notify`             | `(message, user?) => void` | Yes      | —                | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)` so the code can be delivered to the user. |
-| `dbPath`             | `string`                   | No       | `'./auth.db'`    | Path to the auth SQLite database.                                                                                                              |
-| `sessionDbPath`      | `string`                   | No       | `'./sessions.db'`| Path to the session SQLite database.                                                                                                           |
-| `enable2fa`          | `boolean`                  | No       | `true`           | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa` and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned. |
+| Option               | Type                       | Required | Default | Description                                                                                                                                    |
+| -------------------- | -------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authDataDir`        | `string`                   | Yes      | —       | Absolute path to a directory where kaiauth stores its SQLite databases (`auth.db` and `sessions.db`). The directory is created if it does not exist. Must be an absolute path. |
+| `sessionSecret`      | `string`                   | Yes      | —       | Secret for signing the session cookie.                                                                                                         |
+| `buildCookieOptions` | `(extra?) => object`       | Yes      | —       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                               |
+| `notify`             | `(message, user?) => void` | Yes      | —       | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)` so the code can be delivered to the user. |
+| `enable2fa`          | `boolean`                  | No       | `true`  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa` and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned. |
 
 #### Return Value
 
@@ -72,7 +73,7 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 | `router`           | `express.Router`   | Mount with `app.use(router)`.                                                                        |
 | `requireAuth`      | `Function`         | Middleware that rejects unauthenticated requests with 401.                                           |
 | `loginService`     | `LoginService`     | The underlying login service instance.                                                               |
-| `sessionStore`     | `object`           | The `connect-sqlite3` session store.                                                                 |
+| `sessionStore`     | `object`           | The SQLite-backed session store.                                                                     |
 | `bypassTokenStore` | `BypassTokenStore` | Direct access to bypass token persistence. Only present when `enable2fa` is `true` (the default).   |
 | `userStore`        | `UserStore`        | Direct access to user persistence (insert, authenticate, etc.).                                      |
 | `db`               | `Database`         | The raw `better-sqlite3` database instance.                                                          |
@@ -100,10 +101,11 @@ Manages the `user` table in the auth database.
 2. **Standalone** — useful in CLI tools or scripts that need to manage users without starting the full auth router:
 
 ```js
+const path = require('path');
 const Database = require('better-sqlite3');
 const { UserStore } = require('kaiauth');
 
-const db = new Database('./auth.db');
+const db = new Database(path.join(__dirname, 'data', 'auth.db'));
 const userStore = new UserStore(db);
 userStore.upsert({ username: 'alice', password: 'secret' });
 db.close();
