@@ -83,7 +83,6 @@ function createLoginHandlers(loginService, opts) {
     }
     async function verify(req, res, next) {
         try {
-            await (0, session_utils_1.regenerateSession)(req, { username: req.session.user.username });
             res.sendStatus(200);
         }
         catch (err) {

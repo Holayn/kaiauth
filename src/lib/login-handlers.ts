@@ -109,7 +109,6 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
 
   async function verify(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await regenerateSession(req, { username: req.session.user!.username });
       res.sendStatus(200);
     } catch (err) {
       next(err);
