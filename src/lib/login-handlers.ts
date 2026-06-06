@@ -38,7 +38,7 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
 
     if (result.status === Status.FAILED_LOCKED_OUT) {
       notify(`User ${username} is locked out due to too many failed login attempts`);
-      res.send({ success: false });
+      res.send({ success: false, reason: 'Locked out' });
       return;
     }
 
