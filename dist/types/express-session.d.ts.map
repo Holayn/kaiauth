@@ -1,0 +1,1 @@
+{"version":3,"file":"express-session.d.ts","sourceRoot":"","sources":["../../src/types/express-session.ts"],"names":[],"mappings":"AAAA,OAAO,iBAAiB,CAAC;AAEzB,OAAO,QAAQ,iBAAiB,CAAC;IAC/B,UAAU,WAAW;QACnB,IAAI,CAAC,EAAE;YAAE,QAAQ,EAAE,MAAM,CAAA;SAAE,GAAG,IAAI,CAAC;KACpC;CACF"}
