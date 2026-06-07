@@ -29,6 +29,7 @@ class LoginService {
             isValidKey: opts.isValidUser,
             maxAttempts: opts.maxLoginAttempts ?? 3,
             lockoutDurationMs: opts.loginLockoutMs ?? 15 * 60 * 1000,
+            invalidKeysCacheSize: opts.loginInvalidUsersCacheSize,
         });
         if (this._enable2fa) {
             this._twoFAStore = new two_fa_store_1.TwoFAStore({ codeTtlMs: opts.codeTtlMs });
@@ -41,7 +42,7 @@ class LoginService {
     async authenticate(username, password, existingBypassToken = null) {
         if (!this._loginLimiter.canAttempt(username)) {
             await this._randomDelay();
-            return { status: exports.Status.FAILED };
+            return { status: this._loginLimiter.isLockedOut(username) ? exports.Status.FAILED_LOCKED_OUT : exports.Status.FAILED };
         }
         this._loginLimiter.recordAttempt(username);
         const user = this._getUser(username, password);

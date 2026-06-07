@@ -36,6 +36,7 @@ export interface LoginServiceOptions {
   bypassTokenMaxAgeMs?: number;
   maxLoginAttempts?: number;
   loginLockoutMs?: number;
+  loginInvalidUsersCacheSize?: number;
   codeTtlMs?: number;
   failDelayMs?: [number, number];
 }
@@ -66,6 +67,7 @@ export class LoginService {
       isValidKey: opts.isValidUser,
       maxAttempts: opts.maxLoginAttempts ?? 3,
       lockoutDurationMs: opts.loginLockoutMs ?? 15 * 60 * 1000,
+      invalidKeysCacheSize: opts.loginInvalidUsersCacheSize,
     });
 
     if (this._enable2fa) {
@@ -81,7 +83,7 @@ export class LoginService {
   async authenticate(username: string, password: string, existingBypassToken: string | null = null): Promise<AuthResult> {
     if (!this._loginLimiter.canAttempt(username)) {
       await this._randomDelay();
-      return { status: Status.FAILED };
+      return { status: this._loginLimiter.isLockedOut(username) ? Status.FAILED_LOCKED_OUT : Status.FAILED };
     }
 
     this._loginLimiter.recordAttempt(username);

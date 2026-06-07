@@ -42,6 +42,7 @@ export interface LoginServiceOptions {
     bypassTokenMaxAgeMs?: number;
     maxLoginAttempts?: number;
     loginLockoutMs?: number;
+    loginInvalidUsersCacheSize?: number;
     codeTtlMs?: number;
     failDelayMs?: [number, number];
 }

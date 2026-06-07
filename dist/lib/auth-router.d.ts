@@ -10,6 +10,7 @@ export interface AuthRouterOptions {
     buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
     notify: (message: string, username?: string) => void;
     enable2fa?: boolean;
+    loginInvalidUsersCacheSize?: number;
 }
 export interface AuthRouterResult {
     router: Router;

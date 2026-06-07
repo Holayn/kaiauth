@@ -27,6 +27,7 @@ export interface AuthRouterOptions {
   buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
   notify: (message: string, username?: string) => void;
   enable2fa?: boolean;
+  loginInvalidUsersCacheSize?: number;
 }
 
 export interface AuthRouterResult {
@@ -77,6 +78,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
       saveBypassToken: (entry) => bypassTokenStore!.insert(entry),
     }),
     enable2fa,
+    loginInvalidUsersCacheSize: opts.loginInvalidUsersCacheSize,
   });
 
   const sessionStore = new SQLiteSessionStore(new Database(path.join(authDataDir, 'sessions.db')));

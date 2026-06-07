@@ -53,6 +53,7 @@ function createAuthRouter(opts) {
             saveBypassToken: (entry) => bypassTokenStore.insert(entry),
         }),
         enable2fa,
+        loginInvalidUsersCacheSize: opts.loginInvalidUsersCacheSize,
     });
     const sessionStore = new sqlite_session_store_1.SQLiteSessionStore(new better_sqlite3_1.default(path_1.default.join(authDataDir, 'sessions.db')));
     const { auth, authTwoFa, logout, verify } = (0, login_handlers_1.createLoginHandlers)(loginService, {

@@ -9,7 +9,7 @@ kaiauth creates and owns its own SQLite database — it manages user accounts, s
 - **Flexible login flow** — credential check → optional 2FA code challenge → session creation
 - **Optional 2FA** — disable with `enable2fa: false` for a simple username/password flow
 - **2FA bypass tokens** — remember trusted devices so users skip 2FA on repeat logins (when 2FA is enabled)
-- **Rate limiting** — in-memory per-user lockout after configurable failed attempts
+- **Rate limiting** — in-memory per-user lockout after configurable failed attempts, with a bounded LRU cache for unrecognized usernames to prevent username enumeration
 - **Timing-safe** — random delay on failure and constant-time code comparison
 - **Own SQLite database** — manages `user` and (when 2FA is enabled) `twofa_bypass_token` tables internally
 - **SQLite sessions** — persistent session storage backed by SQLite
@@ -65,6 +65,7 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 | `buildCookieOptions` | `(extra?) => object`       | Yes      | —       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                               |
 | `notify`             | `(message, user?) => void` | Yes      | —       | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)` so the code can be delivered to the user. |
 | `enable2fa`          | `boolean`                  | No       | `true`  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa` and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned. |
+| `loginInvalidUsersCacheSize` | `number`           | No       | `5000`  | Maximum number of unrecognized usernames tracked for rate limiting. Failed attempts from invalid usernames accumulate in a bounded LRU cache (evicting oldest entries when full) so they receive the same lockout behavior as valid users, preventing username enumeration. Increase for deployments under active enumeration attacks; decrease to reduce memory on constrained systems. The default (5000) takes just under 1MB of memory. |
 
 #### Return Value
 
