@@ -25,12 +25,13 @@ yargs(hideBin(process.argv))
         .option('db', { type: 'string', demandOption: true, describe: 'Path to the SQLite database file' }),
     (argv) => {
       const store = resolveDb(argv.db);
-      if (store.exists(argv.username)) {
-        console.error(`User "${argv.username}" already exists.`);
-        process.exit(1);
+      const isUpdate = store.exists(argv.username);
+      store.upsert({ username: argv.username, password: argv.password });
+      if (isUpdate) {
+        console.log(`Updated password for user "${argv.username}".`);
+      } else {
+        console.log(`Added user "${argv.username}".`);
       }
-      store.insert({ username: argv.username, password: argv.password });
-      console.log(`Added user "${argv.username}".`);
     }
   )
   .command(

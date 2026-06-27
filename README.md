@@ -135,7 +135,7 @@ npx kaiauth <command> --db <path-to-auth.db>
 | `add-user <username> <password> --db`    | Add a new user.       |
 | `list-users --db`                        | List all users.       |
 
-`add-user` exits non-zero if the username already exists.
+`add-user` updates the password if the username already exists.
 
 **Example**
 
