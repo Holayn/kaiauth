@@ -28,7 +28,7 @@ const app = express();
 app.use(express.json());
 app.use(require('cookie-parser')());
 
-const { router, requireAuth, userStore } = createAuthRouter({
+const { apiRouter, pageRouter, requireAuth, userStore } = createAuthRouter({
   authDataDir: path.join(__dirname, 'data'),
   sessionSecret: 'your-secret',
   buildCookieOptions: (extra) => ({
@@ -37,9 +37,9 @@ const { router, requireAuth, userStore } = createAuthRouter({
     secure: true,
     ...extra,
   }),
-  notify: (message, user) => {
+  notify: (message) => {
     // Audit log for auth events (logins, lockouts, 2FA delivery failures, etc).
-    console.log(`[${user || 'auth'}] ${message}`);
+    console.log(message);
   },
   // At least one of `email` / `discord` is required when 2FA is enabled,
   // unless `development` is set — see the Options table below.
@@ -51,15 +51,19 @@ const { router, requireAuth, userStore } = createAuthRouter({
     botToken: process.env.DISCORD_BOT_TOKEN,
   },
   development: process.env.NODE_ENV !== 'production',
+  serveLoginPage: true,
 });
 
-app.use(router);
+app.use(apiRouter);   // session middleware + all /auth* endpoints
+app.use(pageRouter);  // GET /login, GET /login.js (only present when serveLoginPage: true)
 
 // Protected routes
 app.get('/api/data', requireAuth, (req, res) => {
   res.json({ user: req.session.user });
 });
 ```
+
+`apiRouter` and `pageRouter` are separate so you can mount them at different paths (e.g. API behind `/api`, login page at the app root) — see [Mounting `apiRouter` and `pageRouter` separately](#mounting-apirouter-and-pagerouter-separately).
 
 ## 2FA Code Delivery
 
@@ -75,40 +79,60 @@ Set `development: true` to skip real delivery entirely — codes are logged to t
 
 ### `createAuthRouter(opts)`
 
-Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, userStore, db }`.
+Returns `{ apiRouter, pageRouter, requireAuth, loginService, sessionStore, bypassTokenStore, userStore, db }`.
 
 #### Options
 
-| Option                       | Type                                     | Required | Default                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------- | ---------------------------------------- | -------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `authDataDir`                | `string`                                 | Yes      | —                                       | Absolute path to a directory where kaiauth stores its SQLite databases (`auth.db` and `sessions.db`). The directory is created if it does not exist. Must be an absolute path.                                                                                                                                                                                                                                                              |
-| `sessionSecret`              | `string`                                 | Yes      | —                                       | Secret for signing the session cookie.                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `buildCookieOptions`         | `(extra?) => object`                     | Yes      | —                                       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                                                                                                                                                                                                                                                                                                                            |
-| `notify`                     | `(message, user?) => void`               | Yes      | —                                       | Notification callback for auth events (logins, lockouts, 2FA delivery failures). No longer used for 2FA code delivery once `email`/`discord` is configured — see [2FA Code Delivery](#2fa-code-delivery). Still the delivery mechanism if neither is configured (backward-compatible).                                                                                                                                                      |
-| `enable2fa`                  | `boolean`                                | No       | `true`                                  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa`, `/auth/2fa/resend-email`, and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned.                                                                                                                                                                                            |
-| `development`                | `boolean`                                | No       | `false`                                 | Skips real 2FA delivery — codes are logged to the console instead. Also the only way to enable `enable2fa: true` without configuring `email`/`discord`.                                                                                                                                                                                                                                                                                     |
-| `email`                      | `{ apiKey, from, subject?, buildBody? }` | No       | —                                       | Configures 2FA delivery via [Resend](https://resend.com). `buildBody?: (code) => string` customizes the email body.                                                                                                                                                                                                                                                                                                                         |
-| `discord`                    | `{ botToken: string }`                   | No       | —                                       | Configures 2FA delivery via Discord DM. The bot logs in once at `createAuthRouter` construction time and must share a guild with each target user (or the user must allow DMs from server members).                                                                                                                                                                                                                                         |
-| `twoFAResend`                | `{ maxAttempts?, lockoutMs? }`           | No       | `{ maxAttempts: 3, lockoutMs: 300000 }` | Rate limiting for `POST /auth/2fa/resend-email`, independent of the code-verification rate limiter.                                                                                                                                                                                                                                                                                                                                         |
-| `loginInvalidUsersCacheSize` | `number`                                 | No       | `5000`                                  | Maximum number of unrecognized usernames tracked for rate limiting. Failed attempts from invalid usernames accumulate in a bounded LRU cache (evicting oldest entries when full) so they receive the same lockout behavior as valid users, preventing username enumeration. Increase for deployments under active enumeration attacks; decrease to reduce memory on constrained systems. The default (5000) takes just under 1MB of memory. |
-| `serveLoginPage`             | `boolean`                                | No       | `false`                                 | When `true`, registers `GET /login` and `GET /login.js`, serving a self-contained login page (with 2FA support) that talks to the `/auth` and `/auth/2fa` endpoints.                                                                                                                                                                                                                                                                        |
-| `loginPageOptions`           | `{ title?: string }`                     | No       | —                                       | Options for the login page. `title` is shown in the `<title>` tag and as the page heading. Defaults to `'Sign in'`. Only relevant when `serveLoginPage` is `true`.                                                                                                                                                                                                                                                                          |
+| Option                       | Type                                       | Required | Default                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | ------------------------------------------ | -------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authDataDir`                | `string`                                   | Yes      | —                                       | Absolute path to a directory where kaiauth stores its SQLite databases (`auth.db` and `sessions.db`). The directory is created if it does not exist. Must be an absolute path.                                                                                                                                                                                                                                                              |
+| `sessionSecret`              | `string`                                   | Yes      | —                                       | Secret for signing the session cookie.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `buildCookieOptions`         | `(extra?) => object`                       | Yes      | —                                       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                                                                                                                                                                                                                                                                                                                            |
+| `notify`                     | `(message: string) => void`                | Yes      | —                                       | Audit-log callback for auth events (logins, lockouts, 2FA delivery failures). Not used for 2FA code delivery — see [2FA Code Delivery](#2fa-code-delivery).                                                                                                                                                                                                                                                                                 |
+| `enable2fa`                  | `boolean`                                  | No       | `true`                                  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa`, `/auth/2fa/resend-email`, and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned.                                                                                                                                                                                            |
+| `development`                | `boolean`                                  | No       | `false`                                 | Skips real 2FA delivery — codes are logged to the console instead. Also the only way to enable `enable2fa: true` without configuring `email`/`discord`.                                                                                                                                                                                                                                                                                     |
+| `email`                      | `{ apiKey, from, subject?, buildBody? }`   | No       | —                                       | Configures 2FA delivery via [Resend](https://resend.com). `buildBody?: (code) => string` customizes the email body.                                                                                                                                                                                                                                                                                                                         |
+| `discord`                    | `{ botToken: string }`                     | No       | —                                       | Configures 2FA delivery via Discord DM. The bot logs in once at `createAuthRouter` construction time and must share a guild with each target user (or the user must allow DMs from server members).                                                                                                                                                                                                                                         |
+| `twoFAResend`                | `{ maxAttempts?, lockoutMs? }`             | No       | `{ maxAttempts: 3, lockoutMs: 300000 }` | Rate limiting for `POST /auth/2fa/resend-email`, independent of the code-verification rate limiter.                                                                                                                                                                                                                                                                                                                                         |
+| `loginInvalidUsersCacheSize` | `number`                                   | No       | `5000`                                  | Maximum number of unrecognized usernames tracked for rate limiting. Failed attempts from invalid usernames accumulate in a bounded LRU cache (evicting oldest entries when full) so they receive the same lockout behavior as valid users, preventing username enumeration. Increase for deployments under active enumeration attacks; decrease to reduce memory on constrained systems. The default (5000) takes just under 1MB of memory. |
+| `serveLoginPage`             | `boolean`                                  | No       | `false`                                 | When `true`, populates `pageRouter` with `GET /login` and `GET /login.js`, serving a self-contained login page (with 2FA support) that talks to the `/auth*` endpoints.                                                                                                                                                                                                                                                                     |
+| `loginPageOptions`           | `{ title?: string; apiBasePath?: string }` | No       | —                                       | Options for the login page. `title` is shown in the `<title>` tag and as the page heading, defaulting to `'Sign in'`. `apiBasePath` is the base path the page's client-side JS uses for `/auth*` requests — see [Mounting `apiRouter` and `pageRouter` separately](#mounting-apirouter-and-pagerouter-separately). Only relevant when `serveLoginPage` is `true`.                                                                           |
 
 #### Return Value
 
-| Property           | Type               | Description                                                                                       |
-| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------- |
-| `router`           | `express.Router`   | Mount with `app.use(router)`.                                                                     |
-| `requireAuth`      | `Function`         | Middleware that rejects unauthenticated requests with 401.                                        |
-| `loginService`     | `LoginService`     | The underlying login service instance.                                                            |
-| `sessionStore`     | `object`           | The SQLite-backed session store.                                                                  |
-| `bypassTokenStore` | `BypassTokenStore` | Direct access to bypass token persistence. Only present when `enable2fa` is `true` (the default). |
-| `userStore`        | `UserStore`        | Direct access to user persistence (insert, authenticate, etc.).                                   |
-| `db`               | `Database`         | The raw `better-sqlite3` database instance.                                                       |
+| Property           | Type               | Description                                                                                                                                                                      |
+| ------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiRouter`        | `express.Router`   | Session middleware + all `/auth*` endpoints. Mount with `app.use(apiRouter)` (or `app.use('/api', apiRouter)` etc).                                                              |
+| `pageRouter`       | `express.Router?`  | `GET /login` and `GET /login.js` — static content, no session middleware. Only present when `serveLoginPage` is `true`. Can be mounted at a different path than `apiRouter`.     |
+| `requireAuth`      | `Function`         | Middleware that rejects unauthenticated requests with 401. Needs session middleware to have already run on the request, so use it downstream of (or within) `apiRouter`'s mount. |
+| `loginService`     | `LoginService`     | The underlying login service instance.                                                                                                                                           |
+| `sessionStore`     | `object`           | The SQLite-backed session store.                                                                                                                                                 |
+| `bypassTokenStore` | `BypassTokenStore` | Direct access to bypass token persistence. Only present when `enable2fa` is `true` (the default).                                                                                |
+| `userStore`        | `UserStore`        | Direct access to user persistence (insert, authenticate, etc.).                                                                                                                  |
+| `db`               | `Database`         | The raw `better-sqlite3` database instance.                                                                                                                                      |
+
+#### Mounting `apiRouter` and `pageRouter` separately
+
+The login page's client-side JS needs to know where `/auth*` lives. By default (`apiBasePath` unset) it infers this from its own URL — stripping the `/login` suffix — which only works if `pageRouter` and `apiRouter` end up reachable at the same path prefix (e.g. both mounted directly on `app` with no prefix, or both mounted under the same `app.use('/x', ...)`). If you mount them at *different* paths, set `loginPageOptions.apiBasePath` explicitly so the page knows where to send its requests:
+
+```js
+const { apiRouter, pageRouter } = createAuthRouter({
+  // ...
+  serveLoginPage: true,
+  loginPageOptions: { apiBasePath: '/api' },
+});
+
+app.use('/api', apiRouter);  // POST /api/auth, POST /api/auth/2fa, ...
+app.use(pageRouter);         // GET /login, GET /login.js — served at the app root
+```
+
+Without `apiBasePath` set correctly for this layout, the login page would try to submit to bare `/auth` (404) instead of `/api/auth`.
+
+`apiBasePath` must start with `/` and contain only unreserved URI characters (letters, digits, `-._~/`) — `createAuthRouter` throws immediately if it doesn't, rather than embedding a malformed value into the page.
 
 ### Routes
 
-All routes are mounted under `/auth`:
+All `apiRouter` routes are relative to wherever you mount it, under `/auth`:
 
 | Method | Path                            | Auth | 2FA only | Body                     | Description                                                                                                                                                                                                                                                                                                                                |
 | ------ | ------------------------------- | ---- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -120,7 +144,7 @@ All routes are mounted under `/auth`:
 | POST   | `/auth/invalidate-all-sessions` | Yes  |          | —                        | Wipe all sessions and, when 2FA is enabled, all bypass tokens.                                                                                                                                                                                                                                                                             |
 | POST   | `/auth/revoke-2fa-bypass`       | Yes  | Yes      | `{ username? }`          | Revoke 2FA bypass tokens (for one user or all).                                                                                                                                                                                                                                                                                            |
 
-The login page routes are the exception — they are **not** under `/auth`:
+`pageRouter` is a separate router with its own two routes, relative to wherever *it's* mounted (not necessarily the same place as `apiRouter` — see [Mounting `apiRouter` and `pageRouter` separately](#mounting-apirouter-and-pagerouter-separately)):
 
 | Method | Path        | Auth | Body | Description                                                                                                                                                      |
 | ------ | ----------- | ---- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -204,17 +228,17 @@ Manages the `twofa_bypass_token` table. Available on the return value as `bypass
 
 These modules are used internally by `createAuthRouter` and are not re-exported from the package entry point:
 
-| Module                | Description                                                                     |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `LoginService`        | Framework-agnostic login + 2FA service class.                                   |
-| `createLoginHandlers` | Factory for Express route handlers.                                             |
-| `RateLimiter`         | Generic in-memory rate limiter with lockout.                                    |
-| `TwoFAStore`          | In-memory 2FA code store with auto-expiry.                                      |
-| `deliverTwoFACode`    | Orchestrates 2FA channel selection (dev → discord → email → `notify` fallback). |
-| `DiscordSender`       | Persistent `discord.js` client wrapper for DM delivery.                         |
-| `EmailSender`         | Resend-backed email delivery for 2FA codes.                                     |
-| `regenerateSession`   | Promise wrapper for `req.session.regenerate()`.                                 |
-| `destroySession`      | Promise wrapper for session destruction.                                        |
+| Module                | Description                                                                       |
+| --------------------- | --------------------------------------------------------------------------------- |
+| `LoginService`        | Framework-agnostic login + 2FA service class.                                     |
+| `createLoginHandlers` | Factory for Express route handlers.                                               |
+| `RateLimiter`         | Generic in-memory rate limiter with lockout.                                      |
+| `TwoFAStore`          | In-memory 2FA code store with auto-expiry.                                        |
+| `deliverTwoFACode`    | Orchestrates 2FA channel selection (dev → discord → email; throws if none apply). |
+| `DiscordSender`       | Persistent `discord.js` client wrapper for DM delivery.                           |
+| `EmailSender`         | Resend-backed email delivery for 2FA codes.                                       |
+| `regenerateSession`   | Promise wrapper for `req.session.regenerate()`.                                   |
+| `destroySession`      | Promise wrapper for session destruction.                                          |
 
 ## License
 

@@ -76,8 +76,8 @@ function createAuthRouter(opts) {
     const requireAuth = (req, res, next) => {
         return req.session.user ? next() : res.sendStatus(401);
     };
-    const router = express_1.default.Router();
-    router.use((0, express_session_1.default)({
+    const apiRouter = express_1.default.Router();
+    apiRouter.use((0, express_session_1.default)({
         cookie: buildCookieOptions({ maxAge: 7 * 24 * 60 * 60 * 1000 }),
         name: 'session',
         proxy: true,
@@ -87,20 +87,22 @@ function createAuthRouter(opts) {
         secret: sessionSecret,
         store: sessionStore,
     }));
+    let pageRouter;
     if (serveLoginPage) {
-        const loginPageHtml = (0, login_page_1.renderLoginPageHtml)(opts.loginPageOptions?.title);
-        router.get('/login', (req, res) => {
+        pageRouter = express_1.default.Router();
+        const loginPageHtml = (0, login_page_1.renderLoginPageHtml)(opts.loginPageOptions?.title, opts.loginPageOptions?.apiBasePath);
+        pageRouter.get('/login', (req, res) => {
             res.type('html').send(loginPageHtml);
         });
-        router.get('/login.js', (req, res) => {
+        pageRouter.get('/login.js', (req, res) => {
             res.type('js').send(login_page_1.loginPageJs);
         });
     }
-    router.post('/auth', requiredBody(['username', 'password']), auth);
+    apiRouter.post('/auth', requiredBody(['username', 'password']), auth);
     if (enable2fa) {
-        router.post('/auth/2fa', requiredBody(['twoFACode']), authTwoFa);
-        router.post('/auth/2fa/resend-email', resendTwoFAEmail);
-        router.post('/auth/revoke-2fa-bypass', requireAuth, (req, res) => {
+        apiRouter.post('/auth/2fa', requiredBody(['twoFACode']), authTwoFa);
+        apiRouter.post('/auth/2fa/resend-email', resendTwoFAEmail);
+        apiRouter.post('/auth/revoke-2fa-bypass', requireAuth, (req, res) => {
             const { username } = req.body;
             if (username) {
                 bypassTokenStore.deleteByUsername(username);
@@ -111,9 +113,9 @@ function createAuthRouter(opts) {
             res.sendStatus(200);
         });
     }
-    router.post('/auth/logout', requireAuth, logout);
-    router.get('/auth/verify', requireAuth, verify);
-    router.post('/auth/invalidate-all-sessions', requireAuth, (req, res) => {
+    apiRouter.post('/auth/logout', requireAuth, logout);
+    apiRouter.get('/auth/verify', requireAuth, verify);
+    apiRouter.post('/auth/invalidate-all-sessions', requireAuth, (req, res) => {
         sessionStore.deleteAll();
         if (enable2fa) {
             bypassTokenStore.deleteAll();
@@ -121,8 +123,8 @@ function createAuthRouter(opts) {
         res.sendStatus(200);
     });
     if (enable2fa) {
-        return { router, requireAuth, loginService, sessionStore, bypassTokenStore, userStore, db };
+        return { apiRouter, pageRouter, requireAuth, loginService, sessionStore, bypassTokenStore, userStore, db };
     }
-    return { router, requireAuth, loginService, sessionStore, userStore, db };
+    return { apiRouter, pageRouter, requireAuth, loginService, sessionStore, userStore, db };
 }
 //# sourceMappingURL=auth-router.js.map

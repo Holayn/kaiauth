@@ -34,6 +34,13 @@ export interface AuthRouterOptions {
   serveLoginPage?: boolean;
   loginPageOptions?: {
     title?: string;
+    /**
+     * Base path the login page's client-side JS should call for `/auth*` requests
+     * (e.g. `/api` if `apiRouter` is mounted at `/api` while `pageRouter` is mounted at
+     * the app root). Defaults to inferring it from the page's own URL, which only works
+     * when `pageRouter` and `apiRouter` are mounted at the same path.
+     */
+    apiBasePath?: string;
   };
   development?: boolean;
   email?: EmailSenderConfig;
@@ -45,7 +52,14 @@ export interface AuthRouterOptions {
 }
 
 export interface AuthRouterResult {
-  router: Router;
+  /** Session middleware + all `/auth*` endpoints. Mount this wherever your API lives. */
+  apiRouter: Router;
+  /**
+   * `GET /login` and `GET /login.js` — static content, no session middleware. Only present
+   * when `serveLoginPage` is `true`. Can be mounted at a different path than `apiRouter`;
+   * set `loginPageOptions.apiBasePath` if you do.
+   */
+  pageRouter?: Router;
   requireAuth: RequestHandler;
   loginService: LoginService;
   sessionStore: SQLiteSessionStore;
@@ -123,9 +137,9 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     return req.session.user ? next() : res.sendStatus(401);
   };
 
-  const router = express.Router();
+  const apiRouter = express.Router();
 
-  router.use(session({
+  apiRouter.use(session({
     cookie: buildCookieOptions({ maxAge: 7 * 24 * 60 * 60 * 1000 }),
     name: 'session',
     proxy: true,
@@ -136,22 +150,24 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     store: sessionStore,
   }));
 
+  let pageRouter: Router | undefined;
   if (serveLoginPage) {
-    const loginPageHtml = renderLoginPageHtml(opts.loginPageOptions?.title);
-    router.get('/login', (req, res) => {
+    pageRouter = express.Router();
+    const loginPageHtml = renderLoginPageHtml(opts.loginPageOptions?.title, opts.loginPageOptions?.apiBasePath);
+    pageRouter.get('/login', (req, res) => {
       res.type('html').send(loginPageHtml);
     });
-    router.get('/login.js', (req, res) => {
+    pageRouter.get('/login.js', (req, res) => {
       res.type('js').send(loginPageJs);
     });
   }
 
-  router.post('/auth', requiredBody(['username', 'password']), auth);
+  apiRouter.post('/auth', requiredBody(['username', 'password']), auth);
 
   if (enable2fa) {
-    router.post('/auth/2fa', requiredBody(['twoFACode']), authTwoFa);
-    router.post('/auth/2fa/resend-email', resendTwoFAEmail);
-    router.post('/auth/revoke-2fa-bypass', requireAuth, (req, res) => {
+    apiRouter.post('/auth/2fa', requiredBody(['twoFACode']), authTwoFa);
+    apiRouter.post('/auth/2fa/resend-email', resendTwoFAEmail);
+    apiRouter.post('/auth/revoke-2fa-bypass', requireAuth, (req, res) => {
       const { username } = req.body as { username?: string };
       if (username) {
         bypassTokenStore!.deleteByUsername(username);
@@ -162,9 +178,9 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     });
   }
 
-  router.post('/auth/logout', requireAuth, logout);
-  router.get('/auth/verify', requireAuth, verify);
-  router.post('/auth/invalidate-all-sessions', requireAuth, (req, res) => {
+  apiRouter.post('/auth/logout', requireAuth, logout);
+  apiRouter.get('/auth/verify', requireAuth, verify);
+  apiRouter.post('/auth/invalidate-all-sessions', requireAuth, (req, res) => {
     sessionStore.deleteAll();
     if (enable2fa) {
       bypassTokenStore!.deleteAll();
@@ -173,8 +189,8 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
   });
 
   if (enable2fa) {
-    return { router, requireAuth, loginService, sessionStore, bypassTokenStore, userStore, db };
+    return { apiRouter, pageRouter, requireAuth, loginService, sessionStore, bypassTokenStore, userStore, db };
   }
 
-  return { router, requireAuth, loginService, sessionStore, userStore, db };
+  return { apiRouter, pageRouter, requireAuth, loginService, sessionStore, userStore, db };
 }

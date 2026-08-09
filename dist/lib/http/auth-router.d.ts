@@ -16,6 +16,13 @@ export interface AuthRouterOptions {
     serveLoginPage?: boolean;
     loginPageOptions?: {
         title?: string;
+        /**
+         * Base path the login page's client-side JS should call for `/auth*` requests
+         * (e.g. `/api` if `apiRouter` is mounted at `/api` while `pageRouter` is mounted at
+         * the app root). Defaults to inferring it from the page's own URL, which only works
+         * when `pageRouter` and `apiRouter` are mounted at the same path.
+         */
+        apiBasePath?: string;
     };
     development?: boolean;
     email?: EmailSenderConfig;
@@ -26,7 +33,14 @@ export interface AuthRouterOptions {
     };
 }
 export interface AuthRouterResult {
-    router: Router;
+    /** Session middleware + all `/auth*` endpoints. Mount this wherever your API lives. */
+    apiRouter: Router;
+    /**
+     * `GET /login` and `GET /login.js` — static content, no session middleware. Only present
+     * when `serveLoginPage` is `true`. Can be mounted at a different path than `apiRouter`;
+     * set `loginPageOptions.apiBasePath` if you do.
+     */
+    pageRouter?: Router;
     requireAuth: RequestHandler;
     loginService: LoginService;
     sessionStore: SQLiteSessionStore;
