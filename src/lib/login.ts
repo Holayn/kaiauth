@@ -1,9 +1,9 @@
 import crypto from 'crypto';
 import { RateLimiter } from './rate-limiter';
-import { TwoFAStore } from './two-fa-store';
+import { TwoFAStore } from './store/two-fa-store';
 import { timingSafeCompare } from './utils';
-import type { User } from './user-store';
-import type { BypassTokenEntry, NewBypassToken } from './bypass-token-store';
+import type { User } from './store/user-store';
+import type { BypassTokenEntry, NewBypassToken } from './store/bypass-token-store';
 
 const BYPASS_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_FAIL_DELAY: [number, number] = [200, 600];

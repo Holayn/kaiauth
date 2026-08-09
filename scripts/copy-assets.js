@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const assets = [
-  'lib/login-page.html',
-  'lib/login-page-client.js',
+  'lib/http/login-page.html',
+  'lib/http/login-page-client.js',
 ];
 
 for (const asset of assets) {

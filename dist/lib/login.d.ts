@@ -1,5 +1,5 @@
-import type { User } from './user-store';
-import type { BypassTokenEntry, NewBypassToken } from './bypass-token-store';
+import type { User } from './store/user-store';
+import type { BypassTokenEntry, NewBypassToken } from './store/bypass-token-store';
 export declare const Status: Readonly<{
     readonly TWO_FA_REQUIRED: "twoFA";
     readonly BYPASSED: "bypassed";

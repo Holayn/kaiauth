@@ -8,7 +8,7 @@ const path_1 = __importDefault(require("path"));
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const yargs_1 = __importDefault(require("yargs"));
 const helpers_1 = require("yargs/helpers");
-const user_store_1 = require("../lib/user-store");
+const user_store_1 = require("../lib/store/user-store");
 function resolveDb(dbPath) {
     const resolved = path_1.default.resolve(dbPath);
     const db = new better_sqlite3_1.default(resolved);

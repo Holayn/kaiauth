@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LoginService = exports.Status = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const rate_limiter_1 = require("./rate-limiter");
-const two_fa_store_1 = require("./two-fa-store");
+const two_fa_store_1 = require("./store/two-fa-store");
 const utils_1 = require("./utils");
 const BYPASS_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_FAIL_DELAY = [200, 600];

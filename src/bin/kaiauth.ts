@@ -3,7 +3,7 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { UserStore } from '../lib/user-store';
+import { UserStore } from '../lib/store/user-store';
 
 function resolveDb(dbPath: string): UserStore {
   const resolved = path.resolve(dbPath);

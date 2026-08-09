@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LoginService, Status } from './login';
-import type { User } from './user-store';
+import type { User } from './store/user-store';
 
 const user: User = { id: 1, username: 'alice', email: 'alice@example.com', discord: null };
 
