@@ -57,17 +57,18 @@ class LoginService {
             await this._randomDelay();
             return { status: this._loginLimiter.isLockedOut(username) ? exports.Status.FAILED_LOCKED_OUT : exports.Status.FAILED };
         }
-        this._loginLimiter.clearAttempts(username);
         if (this._enable2fa) {
             const bypassEntry = existingBypassToken
                 ? this._getBypassToken?.(existingBypassToken)
                 : null;
             if (bypassEntry?.username === username) {
+                this._loginLimiter.clearAttempts(username);
                 return { status: exports.Status.BYPASSED, user };
             }
             const { key, code } = this._twoFAStore.create(user);
             return { status: exports.Status.TWO_FA_REQUIRED, user, twoFAKey: key, code };
         }
+        this._loginLimiter.clearAttempts(username);
         return { status: exports.Status.SUCCESS, user };
     }
     async verifyTwoFA(twoFAKey, twoFACode) {
@@ -93,6 +94,7 @@ class LoginService {
             username: entry.user.username,
             expiresAt: Date.now() + this._bypassMaxAge,
         });
+        this._loginLimiter.clearAttempts(entry.user.username);
         return {
             status: exports.Status.SUCCESS,
             user: entry.user,

@@ -110,20 +110,22 @@ export class LoginService {
       return { status: this._loginLimiter.isLockedOut(username) ? Status.FAILED_LOCKED_OUT : Status.FAILED };
     }
 
-    this._loginLimiter.clearAttempts(username);
-
     if (this._enable2fa) {
       const bypassEntry = existingBypassToken
         ? this._getBypassToken?.(existingBypassToken)
         : null;
 
       if (bypassEntry?.username === username) {
+        this._loginLimiter.clearAttempts(username);
+        
         return { status: Status.BYPASSED, user };
       }
 
       const { key, code } = this._twoFAStore!.create(user);
       return { status: Status.TWO_FA_REQUIRED, user, twoFAKey: key, code };
     }
+
+    this._loginLimiter.clearAttempts(username);
 
     return { status: Status.SUCCESS, user };
   }
@@ -158,6 +160,8 @@ export class LoginService {
       username: entry.user.username,
       expiresAt: Date.now() + this._bypassMaxAge,
     });
+
+    this._loginLimiter.clearAttempts(entry.user.username);
 
     return {
       status: Status.SUCCESS,
