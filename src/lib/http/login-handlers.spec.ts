@@ -48,7 +48,7 @@ describe('login-handlers delivery failure handling', () => {
     await auth(fakeReq({ username: 'alice', password: 'pw' }), res as never, vi.fn());
 
     expect(res.statusCode).toBe(500);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining('Failed to deliver 2FA code'), 'alice');
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('Failed to deliver 2FA code'));
   });
 
   it('auth() responds 200 with emailFallbackAvailable when delivery succeeds', async () => {

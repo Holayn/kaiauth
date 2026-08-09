@@ -4,7 +4,7 @@ import type { EmailSender } from '../delivery/email-sender';
 import type { DiscordSender } from '../delivery/discord-sender';
 interface LoginHandlersOptions {
     buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
-    notify?: (message: string, username?: string) => void;
+    notify?: (message: string) => void;
     development?: boolean;
     emailSender?: EmailSender;
     discordSender?: DiscordSender;

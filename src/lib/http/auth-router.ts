@@ -28,7 +28,7 @@ export interface AuthRouterOptions {
   authDataDir: string;
   sessionSecret: string;
   buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
-  notify: (message: string, username?: string) => void;
+  notify: (message: string) => void;
   enable2fa?: boolean;
   loginInvalidUsersCacheSize?: number;
   serveLoginPage?: boolean;

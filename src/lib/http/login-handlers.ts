@@ -12,7 +12,7 @@ const DEFAULT_COOKIE_NAMES = {
 
 interface LoginHandlersOptions {
   buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
-  notify?: (message: string, username?: string) => void;
+  notify?: (message: string) => void;
   development?: boolean;
   emailSender?: EmailSender;
   discordSender?: DiscordSender;
@@ -68,7 +68,7 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
         const delivery = await deliverTwoFACode(result.user, result.code, { development, emailSender, discordSender });
         res.send({ twoFA: true, channel: delivery.channel, emailFallbackAvailable: delivery.emailFallbackAvailable });
       } catch (err) {
-        notify(`Failed to deliver 2FA code to ${result.user.username}: ${(err as Error).message}`, result.user.username);
+        notify(`Failed to deliver 2FA code to ${result.user.username}: ${(err as Error).message}`);
         res.sendStatus(500);
       }
       return;

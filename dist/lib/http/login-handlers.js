@@ -42,7 +42,7 @@ function createLoginHandlers(loginService, opts) {
                 res.send({ twoFA: true, channel: delivery.channel, emailFallbackAvailable: delivery.emailFallbackAvailable });
             }
             catch (err) {
-                notify(`Failed to deliver 2FA code to ${result.user.username}: ${err.message}`, result.user.username);
+                notify(`Failed to deliver 2FA code to ${result.user.username}: ${err.message}`);
                 res.sendStatus(500);
             }
             return;
