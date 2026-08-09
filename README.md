@@ -14,6 +14,7 @@ kaiauth creates and owns its own SQLite database — it manages user accounts, s
 - **Own SQLite database** — manages `user` and (when 2FA is enabled) `twofa_bypass_token` tables internally
 - **SQLite sessions** — persistent session storage backed by SQLite
 - **Bcrypt passwords** — with automatic migration from legacy SHA-256 hashes
+- **Optional login page** — a dependency-free, framework-free HTML/JS login (and 2FA) page served at `/login`, disabled by default
 
 ## Quick Start
 
@@ -58,39 +59,48 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 
 #### Options
 
-| Option               | Type                       | Required | Default | Description                                                                                                                                    |
-| -------------------- | -------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `authDataDir`        | `string`                   | Yes      | —       | Absolute path to a directory where kaiauth stores its SQLite databases (`auth.db` and `sessions.db`). The directory is created if it does not exist. Must be an absolute path. |
-| `sessionSecret`      | `string`                   | Yes      | —       | Secret for signing the session cookie.                                                                                                         |
-| `buildCookieOptions` | `(extra?) => object`       | Yes      | —       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                               |
-| `notify`             | `(message, user?) => void` | Yes      | —       | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)` so the code can be delivered to the user. |
-| `enable2fa`          | `boolean`                  | No       | `true`  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa` and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned. |
-| `loginInvalidUsersCacheSize` | `number`           | No       | `5000`  | Maximum number of unrecognized usernames tracked for rate limiting. Failed attempts from invalid usernames accumulate in a bounded LRU cache (evicting oldest entries when full) so they receive the same lockout behavior as valid users, preventing username enumeration. Increase for deployments under active enumeration attacks; decrease to reduce memory on constrained systems. The default (5000) takes just under 1MB of memory. |
+| Option                       | Type                       | Required | Default | Description                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | -------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authDataDir`                | `string`                   | Yes      | —       | Absolute path to a directory where kaiauth stores its SQLite databases (`auth.db` and `sessions.db`). The directory is created if it does not exist. Must be an absolute path.                                                                                                                                                                                                                                                              |
+| `sessionSecret`              | `string`                   | Yes      | —       | Secret for signing the session cookie.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `buildCookieOptions`         | `(extra?) => object`       | Yes      | —       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                                                                                                                                                                                                                                                                                                                            |
+| `notify`                     | `(message, user?) => void` | Yes      | —       | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)` so the code can be delivered to the user.                                                                                                                                                                                                                                                                                              |
+| `enable2fa`                  | `boolean`                  | No       | `true`  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa` and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned.                                                                                                                                                                                                                       |
+| `loginInvalidUsersCacheSize` | `number`                   | No       | `5000`  | Maximum number of unrecognized usernames tracked for rate limiting. Failed attempts from invalid usernames accumulate in a bounded LRU cache (evicting oldest entries when full) so they receive the same lockout behavior as valid users, preventing username enumeration. Increase for deployments under active enumeration attacks; decrease to reduce memory on constrained systems. The default (5000) takes just under 1MB of memory. |
+| `serveLoginPage`             | `boolean`                  | No       | `false` | When `true`, registers `GET /login` and `GET /login.js`, serving a self-contained login page (with 2FA support) that talks to the `/auth` and `/auth/2fa` endpoints.                                                                                                                                                                                                                                                                        |
+| `loginPageOptions`           | `{ title?: string }`       | No       | —       | Options for the login page. `title` is shown in the `<title>` tag and as the page heading. Defaults to `'Sign in'`. Only relevant when `serveLoginPage` is `true`.                                                                                                                                                                                                                                                                          |
 
 #### Return Value
 
-| Property           | Type               | Description                                                                                          |
-| ------------------ | ------------------ | ---------------------------------------------------------------------------------------------------- |
-| `router`           | `express.Router`   | Mount with `app.use(router)`.                                                                        |
-| `requireAuth`      | `Function`         | Middleware that rejects unauthenticated requests with 401.                                           |
-| `loginService`     | `LoginService`     | The underlying login service instance.                                                               |
-| `sessionStore`     | `object`           | The SQLite-backed session store.                                                                     |
-| `bypassTokenStore` | `BypassTokenStore` | Direct access to bypass token persistence. Only present when `enable2fa` is `true` (the default).   |
-| `userStore`        | `UserStore`        | Direct access to user persistence (insert, authenticate, etc.).                                      |
-| `db`               | `Database`         | The raw `better-sqlite3` database instance.                                                          |
+| Property           | Type               | Description                                                                                       |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------- |
+| `router`           | `express.Router`   | Mount with `app.use(router)`.                                                                     |
+| `requireAuth`      | `Function`         | Middleware that rejects unauthenticated requests with 401.                                        |
+| `loginService`     | `LoginService`     | The underlying login service instance.                                                            |
+| `sessionStore`     | `object`           | The SQLite-backed session store.                                                                  |
+| `bypassTokenStore` | `BypassTokenStore` | Direct access to bypass token persistence. Only present when `enable2fa` is `true` (the default). |
+| `userStore`        | `UserStore`        | Direct access to user persistence (insert, authenticate, etc.).                                   |
+| `db`               | `Database`         | The raw `better-sqlite3` database instance.                                                       |
 
 ### Routes
 
 All routes are mounted under `/auth`:
 
-| Method | Path                            | Auth | 2FA only | Body                     | Description                                                                                                    |
-| ------ | ------------------------------- | ---- | -------- | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Method | Path                            | Auth | 2FA only | Body                     | Description                                                                                                                                       |
+| ------ | ------------------------------- | ---- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/auth`                         | No   |          | `{ username, password }` | Login — validates credentials. With 2FA enabled, returns `{ twoFA: true }` if a code challenge is required; otherwise creates a session directly. |
-| POST   | `/auth/2fa`                     | No   | Yes      | `{ twoFACode }`          | Verify 2FA code and create session.                                                                            |
-| POST   | `/auth/logout`                  | Yes  |          | —                        | Destroy the session.                                                                                           |
-| GET    | `/auth/verify`                  | Yes  |          | —                        | Verify & refresh an existing session.                                                                          |
-| POST   | `/auth/invalidate-all-sessions` | Yes  |          | —                        | Wipe all sessions and, when 2FA is enabled, all bypass tokens.                                                 |
-| POST   | `/auth/revoke-2fa-bypass`       | Yes  | Yes      | `{ username? }`          | Revoke 2FA bypass tokens (for one user or all).                                                                |
+| POST   | `/auth/2fa`                     | No   | Yes      | `{ twoFACode }`          | Verify 2FA code and create session.                                                                                                               |
+| POST   | `/auth/logout`                  | Yes  |          | —                        | Destroy the session.                                                                                                                              |
+| GET    | `/auth/verify`                  | Yes  |          | —                        | Verify & refresh an existing session.                                                                                                             |
+| POST   | `/auth/invalidate-all-sessions` | Yes  |          | —                        | Wipe all sessions and, when 2FA is enabled, all bypass tokens.                                                                                    |
+| POST   | `/auth/revoke-2fa-bypass`       | Yes  | Yes      | `{ username? }`          | Revoke 2FA bypass tokens (for one user or all).                                                                                                   |
+
+The login page routes are the exception — they are **not** under `/auth`:
+
+| Method | Path        | Auth | Body | Description                                                                                                                                                      |
+| ------ | ----------- | ---- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/login`    | No   | —    | Login page (HTML). Only registered when `serveLoginPage: true`. Handles 2FA client-side based on the `/auth` response — no server-side branching on `enable2fa`. |
+| GET    | `/login.js` | No   | —    | Client-side script for the login page. Only registered when `serveLoginPage: true`.                                                                              |
 
 ### `UserStore`
 
@@ -112,15 +122,15 @@ userStore.upsert({ username: 'alice', password: 'secret' });
 db.close();
 ```
 
-| Method                            | Description                                                          |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `insert({ username, password })`  | Create a new user (password is bcrypt-hashed automatically).         |
-| `upsert({ username, password })`  | Insert or overwrite a user (password is bcrypt-hashed automatically).|
-| `authenticate(username, password)`| Validate credentials. Returns `{ id, username }` or `null`.         |
-| `setPassword(username, password)` | Update a user's password (bcrypt-hashed automatically).              |
-| `exists(username)`                | Returns `true` if the username exists.                               |
-| `getByUsername(username)`         | Look up user by username (without password).                         |
-| `findAll()`                       | List all users (without passwords).                                  |
+| Method                             | Description                                                           |
+| ---------------------------------- | --------------------------------------------------------------------- |
+| `insert({ username, password })`   | Create a new user (password is bcrypt-hashed automatically).          |
+| `upsert({ username, password })`   | Insert or overwrite a user (password is bcrypt-hashed automatically). |
+| `authenticate(username, password)` | Validate credentials. Returns `{ id, username }` or `null`.           |
+| `setPassword(username, password)`  | Update a user's password (bcrypt-hashed automatically).               |
+| `exists(username)`                 | Returns `true` if the username exists.                                |
+| `getByUsername(username)`          | Look up user by username (without password).                          |
+| `findAll()`                        | List all users (without passwords).                                   |
 
 ### CLI
 
@@ -130,10 +140,10 @@ kaiauth ships a `kaiauth` CLI for managing users directly against the auth datab
 npx kaiauth <command> --db <path-to-auth.db>
 ```
 
-| Command                                  | Description           |
-| ---------------------------------------- | --------------------- |
-| `add-user <username> <password> --db`    | Add a new user.       |
-| `list-users --db`                        | List all users.       |
+| Command                               | Description     |
+| ------------------------------------- | --------------- |
+| `add-user <username> <password> --db` | Add a new user. |
+| `list-users --db`                     | List all users. |
 
 `add-user` updates the password if the username already exists.
 
@@ -167,14 +177,14 @@ Manages the `twofa_bypass_token` table. Available on the return value as `bypass
 
 These modules are used internally by `createAuthRouter` and are not re-exported from the package entry point:
 
-| Module                | Description                                           |
-| --------------------- | ----------------------------------------------------- |
-| `LoginService`        | Framework-agnostic login + 2FA service class.         |
-| `createLoginHandlers` | Factory for Express route handlers.                   |
-| `RateLimiter`         | Generic in-memory rate limiter with lockout.          |
-| `TwoFAStore`          | In-memory 2FA code store with auto-expiry.            |
-| `regenerateSession`   | Promise wrapper for `req.session.regenerate()`.       |
-| `destroySession`      | Promise wrapper for session destruction.              |
+| Module                | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `LoginService`        | Framework-agnostic login + 2FA service class.   |
+| `createLoginHandlers` | Factory for Express route handlers.             |
+| `RateLimiter`         | Generic in-memory rate limiter with lockout.    |
+| `TwoFAStore`          | In-memory 2FA code store with auto-expiry.      |
+| `regenerateSession`   | Promise wrapper for `req.session.regenerate()`. |
+| `destroySession`      | Promise wrapper for session destruction.        |
 
 ## License
 

@@ -11,6 +11,10 @@ export interface AuthRouterOptions {
     notify: (message: string, username?: string) => void;
     enable2fa?: boolean;
     loginInvalidUsersCacheSize?: number;
+    serveLoginPage?: boolean;
+    loginPageOptions?: {
+        title?: string;
+    };
 }
 export interface AuthRouterResult {
     router: Router;

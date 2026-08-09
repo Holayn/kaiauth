@@ -14,6 +14,7 @@ const login_1 = require("./login");
 const login_handlers_1 = require("./login-handlers");
 const bypass_token_store_1 = require("./bypass-token-store");
 const user_store_1 = require("./user-store");
+const login_page_1 = require("./login-page");
 function requiredBody(properties) {
     return (req, res, next) => {
         for (const p of properties) {
@@ -26,7 +27,7 @@ function requiredBody(properties) {
     };
 }
 function createAuthRouter(opts) {
-    const { authDataDir, sessionSecret, buildCookieOptions, notify, enable2fa = true, } = opts;
+    const { authDataDir, sessionSecret, buildCookieOptions, notify, enable2fa = true, serveLoginPage = false, } = opts;
     if (!path_1.default.isAbsolute(authDataDir)) {
         throw new Error('createAuthRouter requires an absolute path for authDataDir');
     }
@@ -74,6 +75,15 @@ function createAuthRouter(opts) {
         secret: sessionSecret,
         store: sessionStore,
     }));
+    if (serveLoginPage) {
+        const loginPageHtml = (0, login_page_1.renderLoginPageHtml)(opts.loginPageOptions?.title);
+        router.get('/login', (req, res) => {
+            res.type('html').send(loginPageHtml);
+        });
+        router.get('/login.js', (req, res) => {
+            res.type('js').send(login_page_1.loginPageJs);
+        });
+    }
     router.post('/auth', requiredBody(['username', 'password']), auth);
     if (enable2fa) {
         router.post('/auth/2fa', requiredBody(['twoFACode']), authTwoFa);

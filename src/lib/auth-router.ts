@@ -8,6 +8,7 @@ import { LoginService } from './login';
 import { createLoginHandlers } from './login-handlers';
 import { BypassTokenStore } from './bypass-token-store';
 import { UserStore } from './user-store';
+import { renderLoginPageHtml, loginPageJs } from './login-page';
 
 function requiredBody(properties: string[]): RequestHandler {
   return (req, res, next) => {
@@ -28,6 +29,10 @@ export interface AuthRouterOptions {
   notify: (message: string, username?: string) => void;
   enable2fa?: boolean;
   loginInvalidUsersCacheSize?: number;
+  serveLoginPage?: boolean;
+  loginPageOptions?: {
+    title?: string;
+  };
 }
 
 export interface AuthRouterResult {
@@ -47,6 +52,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     buildCookieOptions,
     notify,
     enable2fa = true,
+    serveLoginPage = false,
   } = opts;
 
   if (!path.isAbsolute(authDataDir)) {
@@ -104,6 +110,16 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     secret: sessionSecret,
     store: sessionStore,
   }));
+
+  if (serveLoginPage) {
+    const loginPageHtml = renderLoginPageHtml(opts.loginPageOptions?.title);
+    router.get('/login', (req, res) => {
+      res.type('html').send(loginPageHtml);
+    });
+    router.get('/login.js', (req, res) => {
+      res.type('js').send(loginPageJs);
+    });
+  }
 
   router.post('/auth', requiredBody(['username', 'password']), auth);
 
