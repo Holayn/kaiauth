@@ -1,10 +1,11 @@
 import crypto from 'crypto';
+import type { User } from './user-store';
 
 const CODE_LENGTH = 6;
 const CODE_TTL_MS = 60 * 1000;
 
 export interface TwoFAEntry {
-  username: string;
+  user: User;
   code: string;
 }
 
@@ -31,9 +32,9 @@ export class TwoFAStore {
     return this._entries[key];
   }
 
-  create(username: string): { key: string; code: string } {
+  create(user: User): { key: string; code: string } {
     for (const [key, entry] of Object.entries(this._entries)) {
-      if (entry.username === username) {
+      if (entry.user.username === user.username) {
         delete this._entries[key];
       }
     }
@@ -45,7 +46,7 @@ export class TwoFAStore {
       .join('')
       .toUpperCase();
 
-    this._entries[key] = { username, code };
+    this._entries[key] = { user, code };
     setTimeout(() => { delete this._entries[key]; }, this._codeTtlMs);
 
     return { key, code };

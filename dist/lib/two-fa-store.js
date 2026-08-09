@@ -19,9 +19,9 @@ class TwoFAStore {
     get(key) {
         return this._entries[key];
     }
-    create(username) {
+    create(user) {
         for (const [key, entry] of Object.entries(this._entries)) {
-            if (entry.username === username) {
+            if (entry.user.username === user.username) {
                 delete this._entries[key];
             }
         }
@@ -29,7 +29,7 @@ class TwoFAStore {
         const code = Array.from({ length: this._codeLength }, () => crypto_1.default.randomInt(36).toString(36))
             .join('')
             .toUpperCase();
-        this._entries[key] = { username, code };
+        this._entries[key] = { user, code };
         setTimeout(() => { delete this._entries[key]; }, this._codeTtlMs);
         return { key, code };
     }

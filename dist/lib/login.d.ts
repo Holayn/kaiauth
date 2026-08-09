@@ -9,17 +9,15 @@ export declare const Status: Readonly<{
 }>;
 export type AuthResult = {
     status: typeof Status.TWO_FA_REQUIRED;
-    username: string;
     user: User;
     twoFAKey: string;
     code: string;
 } | {
     status: typeof Status.BYPASSED;
-    username: string;
     user: User;
 } | {
     status: typeof Status.SUCCESS;
-    username: string;
+    user: User;
 } | {
     status: typeof Status.FAILED;
 } | {
@@ -27,7 +25,7 @@ export type AuthResult = {
 };
 export type TwoFAResult = {
     status: typeof Status.SUCCESS;
-    username: string;
+    user: User;
     bypassToken: string;
     bypassMaxAge: number;
 } | {
@@ -45,7 +43,16 @@ export interface LoginServiceOptions {
     loginInvalidUsersCacheSize?: number;
     codeTtlMs?: number;
     failDelayMs?: [number, number];
+    maxResendAttempts?: number;
+    resendLockoutMs?: number;
 }
+export type PendingTwoFAResult = {
+    status: typeof Status.SUCCESS;
+    user: User;
+    code: string;
+} | {
+    status: typeof Status.FAILED;
+};
 export declare class LoginService {
     static readonly Status: Readonly<{
         readonly TWO_FA_REQUIRED: "twoFA";
@@ -63,9 +70,11 @@ export declare class LoginService {
     private _loginLimiter;
     private _twoFAStore?;
     private _twoFALimiter?;
+    private _resendLimiter?;
     private _randomDelay;
     constructor(opts: LoginServiceOptions);
     authenticate(username: string, password: string, existingBypassToken?: string | null): Promise<AuthResult>;
     verifyTwoFA(twoFAKey: string, twoFACode: string): Promise<TwoFAResult>;
+    getPendingTwoFA(twoFAKey: string): Promise<PendingTwoFAResult>;
 }
 //# sourceMappingURL=login.d.ts.map

@@ -4,6 +4,8 @@ import { SQLiteSessionStore } from './sqlite-session-store';
 import { LoginService } from './login';
 import { BypassTokenStore } from './bypass-token-store';
 import { UserStore } from './user-store';
+import { type DiscordSenderConfig } from './discord-sender';
+import { type EmailSenderConfig } from './email-sender';
 export interface AuthRouterOptions {
     authDataDir: string;
     sessionSecret: string;
@@ -14,6 +16,13 @@ export interface AuthRouterOptions {
     serveLoginPage?: boolean;
     loginPageOptions?: {
         title?: string;
+    };
+    development?: boolean;
+    email?: EmailSenderConfig;
+    discord?: DiscordSenderConfig;
+    twoFAResend?: {
+        maxAttempts?: number;
+        lockoutMs?: number;
     };
 }
 export interface AuthRouterResult {

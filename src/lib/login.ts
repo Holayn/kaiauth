@@ -17,14 +17,14 @@ export const Status = Object.freeze({
 } as const);
 
 export type AuthResult =
-  | { status: typeof Status.TWO_FA_REQUIRED; username: string; user: User; twoFAKey: string; code: string }
-  | { status: typeof Status.BYPASSED; username: string; user: User }
-  | { status: typeof Status.SUCCESS; username: string }
+  | { status: typeof Status.TWO_FA_REQUIRED; user: User; twoFAKey: string; code: string }
+  | { status: typeof Status.BYPASSED; user: User }
+  | { status: typeof Status.SUCCESS; user: User }
   | { status: typeof Status.FAILED }
   | { status: typeof Status.FAILED_LOCKED_OUT };
 
 export type TwoFAResult =
-  | { status: typeof Status.SUCCESS; username: string; bypassToken: string; bypassMaxAge: number }
+  | { status: typeof Status.SUCCESS; user: User; bypassToken: string; bypassMaxAge: number }
   | { status: typeof Status.FAILED };
 
 export interface LoginServiceOptions {
@@ -39,7 +39,13 @@ export interface LoginServiceOptions {
   loginInvalidUsersCacheSize?: number;
   codeTtlMs?: number;
   failDelayMs?: [number, number];
+  maxResendAttempts?: number;
+  resendLockoutMs?: number;
 }
+
+export type PendingTwoFAResult =
+  | { status: typeof Status.SUCCESS; user: User; code: string }
+  | { status: typeof Status.FAILED };
 
 export class LoginService {
   static readonly Status = Status;
@@ -53,6 +59,7 @@ export class LoginService {
   private _loginLimiter: RateLimiter;
   private _twoFAStore?: TwoFAStore;
   private _twoFALimiter?: RateLimiter;
+  private _resendLimiter?: RateLimiter;
   private _randomDelay: () => Promise<void>;
 
   constructor(opts: LoginServiceOptions) {
@@ -74,6 +81,11 @@ export class LoginService {
       this._twoFAStore = new TwoFAStore({ codeTtlMs: opts.codeTtlMs });
       this._twoFALimiter = new RateLimiter({
         isValidKey: (key) => this._twoFAStore!.has(key),
+      });
+      this._resendLimiter = new RateLimiter({
+        isValidKey: (key) => this._twoFAStore!.has(key),
+        maxAttempts: opts.maxResendAttempts ?? 3,
+        lockoutDurationMs: opts.resendLockoutMs ?? 5 * 60 * 1000,
       });
     }
 
@@ -102,14 +114,14 @@ export class LoginService {
         : null;
 
       if (bypassEntry?.username === username) {
-        return { status: Status.BYPASSED, username, user };
+        return { status: Status.BYPASSED, user };
       }
 
-      const { key, code } = this._twoFAStore!.create(username);
-      return { status: Status.TWO_FA_REQUIRED, username, user, twoFAKey: key, code };
+      const { key, code } = this._twoFAStore!.create(user);
+      return { status: Status.TWO_FA_REQUIRED, user, twoFAKey: key, code };
     }
 
-    return { status: Status.SUCCESS, username };
+    return { status: Status.SUCCESS, user };
   }
 
   async verifyTwoFA(twoFAKey: string, twoFACode: string): Promise<TwoFAResult> {
@@ -130,16 +142,31 @@ export class LoginService {
     const bypassToken = crypto.randomBytes(32).toString('hex');
     this._saveBypassToken!({
       token: bypassToken,
-      username: entry.username,
+      username: entry.user.username,
       expiresAt: Date.now() + this._bypassMaxAge,
     });
 
     return {
       status: Status.SUCCESS,
-      username: entry.username,
+      user: entry.user,
       bypassToken,
       bypassMaxAge: this._bypassMaxAge,
     };
+  }
+
+  async getPendingTwoFA(twoFAKey: string): Promise<PendingTwoFAResult> {
+    if (!twoFAKey || !this._resendLimiter?.canAttempt(twoFAKey)) {
+      return { status: Status.FAILED };
+    }
+
+    this._resendLimiter.recordAttempt(twoFAKey);
+
+    const entry = this._twoFAStore!.get(twoFAKey);
+    if (!entry) {
+      return { status: Status.FAILED };
+    }
+
+    return { status: Status.SUCCESS, user: entry.user, code: entry.code };
   }
 }
 

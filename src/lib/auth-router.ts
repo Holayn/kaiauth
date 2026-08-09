@@ -9,6 +9,8 @@ import { createLoginHandlers } from './login-handlers';
 import { BypassTokenStore } from './bypass-token-store';
 import { UserStore } from './user-store';
 import { renderLoginPageHtml, loginPageJs } from './login-page';
+import { DiscordSender, type DiscordSenderConfig } from './discord-sender';
+import { EmailSender, type EmailSenderConfig } from './email-sender';
 
 function requiredBody(properties: string[]): RequestHandler {
   return (req, res, next) => {
@@ -33,6 +35,13 @@ export interface AuthRouterOptions {
   loginPageOptions?: {
     title?: string;
   };
+  development?: boolean;
+  email?: EmailSenderConfig;
+  discord?: DiscordSenderConfig;
+  twoFAResend?: {
+    maxAttempts?: number;
+    lockoutMs?: number;
+  };
 }
 
 export interface AuthRouterResult {
@@ -53,6 +62,9 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     notify,
     enable2fa = true,
     serveLoginPage = false,
+    development,
+    email,
+    discord,
   } = opts;
 
   if (!path.isAbsolute(authDataDir)) {
@@ -62,8 +74,16 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     throw new Error('createAuthRouter authDataDir must be a directory');
   }
   if (!notify) throw new Error('createAuthRouter requires a notify function');
+  if (enable2fa && !development && !email && !discord) {
+    throw new Error(
+      'createAuthRouter requires at least one 2FA delivery method (email or discord) when enable2fa is true, unless development is set'
+    );
+  }
 
   fs.mkdirSync(authDataDir, { recursive: true });
+
+  const discordSender = discord ? new DiscordSender(discord) : undefined;
+  const emailSender = email ? new EmailSender(email) : undefined;
 
   const db = new Database(path.join(authDataDir, 'auth.db'));
   const userStore = new UserStore(db);
@@ -85,13 +105,18 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     }),
     enable2fa,
     loginInvalidUsersCacheSize: opts.loginInvalidUsersCacheSize,
+    maxResendAttempts: opts.twoFAResend?.maxAttempts,
+    resendLockoutMs: opts.twoFAResend?.lockoutMs,
   });
 
   const sessionStore = new SQLiteSessionStore(new Database(path.join(authDataDir, 'sessions.db')));
 
-  const { auth, authTwoFa, logout, verify } = createLoginHandlers(loginService, {
+  const { auth, authTwoFa, resendTwoFAEmail, logout, verify } = createLoginHandlers(loginService, {
     buildCookieOptions,
     notify,
+    development,
+    emailSender,
+    discordSender,
   });
 
   const requireAuth: RequestHandler = (req, res, next) => {
@@ -125,6 +150,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
 
   if (enable2fa) {
     router.post('/auth/2fa', requiredBody(['twoFACode']), authTwoFa);
+    router.post('/auth/2fa/resend-email', resendTwoFAEmail);
     router.post('/auth/revoke-2fa-bypass', requireAuth, (req, res) => {
       const { username } = req.body as { username?: string };
       if (username) {

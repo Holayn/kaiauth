@@ -5,6 +5,13 @@ interface RateLimiterOptions {
   maxAttempts?: number;
   lockoutDurationMs?: number;
   invalidKeysCacheSize?: number;
+  /**
+   * How long to remember a valid key's attempt count since it was last touched.
+   * Must be at least `lockoutDurationMs` — otherwise a locked-out entry could be evicted
+   * (and its lockout silently lifted) before `lockedUntil` actually passes. Defaults to
+   * `lockoutDurationMs`; values below it are clamped up to it.
+   */
+  attemptsTtlMs?: number;
 }
 
 interface AttemptEntry {
@@ -16,13 +23,24 @@ export class RateLimiter {
   private _isValidKey: (key: string) => boolean;
   private _maxAttempts: number;
   private _lockoutDurationMs: number;
-  private _attempts: Map<string, AttemptEntry> = new Map();
+  private _attempts: LRUCache<string, AttemptEntry>;
   private _badAttempts: LRUCache<string, AttemptEntry>;
 
-  constructor({ isValidKey, maxAttempts = 3, lockoutDurationMs = 15 * 60 * 1000, invalidKeysCacheSize = 5000 }: RateLimiterOptions) {
+  constructor({ isValidKey, maxAttempts = 3, lockoutDurationMs = 15 * 60 * 1000, invalidKeysCacheSize = 5000, attemptsTtlMs }: RateLimiterOptions) {
     this._isValidKey = isValidKey;
     this._maxAttempts = maxAttempts;
     this._lockoutDurationMs = lockoutDurationMs;
+    // No `max` here: valid keys only arrive via `isValidKey`, so growth is gated by real
+    // application state (usernames, active 2FA sessions) rather than attacker-chosen input.
+    // A count-based cap would let unrelated traffic evict another key's attempt count early.
+    this._attempts = new LRUCache<string, AttemptEntry>({
+      ttl: Math.max(attemptsTtlMs ?? lockoutDurationMs, lockoutDurationMs),
+      // Without `max`, entries only leave via TTL expiry, which by default only happens
+      // lazily when that exact key is looked up again — a key that's never touched after
+      // its final attempt (e.g. an abandoned twoFAKey) would otherwise sit here forever.
+      // Autopurge reclaims expired entries on a background timer instead.
+      ttlAutopurge: true,
+    });
     this._badAttempts = new LRUCache<string, AttemptEntry>({
       max: invalidKeysCacheSize,
       ttl: lockoutDurationMs,

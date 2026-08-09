@@ -36,6 +36,11 @@ class LoginService {
             this._twoFALimiter = new rate_limiter_1.RateLimiter({
                 isValidKey: (key) => this._twoFAStore.has(key),
             });
+            this._resendLimiter = new rate_limiter_1.RateLimiter({
+                isValidKey: (key) => this._twoFAStore.has(key),
+                maxAttempts: opts.maxResendAttempts ?? 3,
+                lockoutDurationMs: opts.resendLockoutMs ?? 5 * 60 * 1000,
+            });
         }
         this._randomDelay = () => randomDelay(this._failDelay);
     }
@@ -56,12 +61,12 @@ class LoginService {
                 ? this._getBypassToken?.(existingBypassToken)
                 : null;
             if (bypassEntry?.username === username) {
-                return { status: exports.Status.BYPASSED, username, user };
+                return { status: exports.Status.BYPASSED, user };
             }
-            const { key, code } = this._twoFAStore.create(username);
-            return { status: exports.Status.TWO_FA_REQUIRED, username, user, twoFAKey: key, code };
+            const { key, code } = this._twoFAStore.create(user);
+            return { status: exports.Status.TWO_FA_REQUIRED, user, twoFAKey: key, code };
         }
-        return { status: exports.Status.SUCCESS, username };
+        return { status: exports.Status.SUCCESS, user };
     }
     async verifyTwoFA(twoFAKey, twoFACode) {
         if (!twoFAKey || !this._twoFALimiter?.canAttempt(twoFAKey)) {
@@ -77,15 +82,26 @@ class LoginService {
         const bypassToken = crypto_1.default.randomBytes(32).toString('hex');
         this._saveBypassToken({
             token: bypassToken,
-            username: entry.username,
+            username: entry.user.username,
             expiresAt: Date.now() + this._bypassMaxAge,
         });
         return {
             status: exports.Status.SUCCESS,
-            username: entry.username,
+            user: entry.user,
             bypassToken,
             bypassMaxAge: this._bypassMaxAge,
         };
+    }
+    async getPendingTwoFA(twoFAKey) {
+        if (!twoFAKey || !this._resendLimiter?.canAttempt(twoFAKey)) {
+            return { status: exports.Status.FAILED };
+        }
+        this._resendLimiter.recordAttempt(twoFAKey);
+        const entry = this._twoFAStore.get(twoFAKey);
+        if (!entry) {
+            return { status: exports.Status.FAILED };
+        }
+        return { status: exports.Status.SUCCESS, user: entry.user, code: entry.code };
     }
 }
 exports.LoginService = LoginService;

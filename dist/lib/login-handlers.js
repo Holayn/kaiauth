@@ -3,12 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createLoginHandlers = createLoginHandlers;
 const login_1 = require("./login");
 const session_utils_1 = require("./session-utils");
+const two_fa_delivery_1 = require("./two-fa-delivery");
 const DEFAULT_COOKIE_NAMES = {
     twoFAKey: 'TWOFAKEY',
     bypass: 'TWOFABYPASS',
 };
 function createLoginHandlers(loginService, opts) {
-    const { buildCookieOptions, notify = () => { } } = opts;
+    const { buildCookieOptions, notify = () => { }, development, emailSender, discordSender } = opts;
     const cookies = DEFAULT_COOKIE_NAMES;
     async function auth(req, res, next) {
         const { username, password } = req.body;
@@ -23,9 +24,9 @@ function createLoginHandlers(loginService, opts) {
             return;
         }
         if (result.status === login_1.Status.BYPASSED) {
-            notify(`${result.username} logged in with 2FA bypass (${req.ip})`);
+            notify(`${result.user.username} logged in with 2FA bypass (${req.ip})`);
             try {
-                await (0, session_utils_1.regenerateSession)(req, { username: result.username });
+                await (0, session_utils_1.regenerateSession)(req, { username: result.user.username });
                 res.sendStatus(200);
             }
             catch (err) {
@@ -35,15 +36,21 @@ function createLoginHandlers(loginService, opts) {
         }
         if (result.status === login_1.Status.TWO_FA_REQUIRED) {
             res.cookie(cookies.twoFAKey, result.twoFAKey, buildCookieOptions());
-            notify(`${result.username} passed initial auth, 2FA required (${req.ip})`);
-            notify(result.code, result.username);
-            res.send({ twoFA: true });
+            notify(`${result.user.username} passed initial auth, 2FA required (${req.ip})`);
+            try {
+                const delivery = await (0, two_fa_delivery_1.deliverTwoFACode)(result.user, result.code, { development, emailSender, discordSender });
+                res.send({ twoFA: true, channel: delivery.channel, emailFallbackAvailable: delivery.emailFallbackAvailable });
+            }
+            catch (err) {
+                notify(`Failed to deliver 2FA code to ${result.user.username}: ${err.message}`, result.user.username);
+                res.sendStatus(500);
+            }
             return;
         }
         if (result.status === login_1.Status.SUCCESS) {
-            notify(`${result.username} logged in (${req.ip})`);
+            notify(`${result.user.username} logged in (${req.ip})`);
             try {
-                await (0, session_utils_1.regenerateSession)(req, { username: result.username });
+                await (0, session_utils_1.regenerateSession)(req, { username: result.user.username });
                 res.sendStatus(200);
             }
             catch (err) {
@@ -61,15 +68,37 @@ function createLoginHandlers(loginService, opts) {
             res.send({ success: false });
             return;
         }
-        notify(`${result.username} passed 2FA, logging in (${req.ip})`);
+        notify(`${result.user.username} passed 2FA, logging in (${req.ip})`);
         res.cookie(cookies.twoFAKey, '', buildCookieOptions({ maxAge: 0 }));
         res.cookie(cookies.bypass, result.bypassToken, buildCookieOptions({ maxAge: result.bypassMaxAge }));
         try {
-            await (0, session_utils_1.regenerateSession)(req, { username: result.username });
+            await (0, session_utils_1.regenerateSession)(req, { username: result.user.username });
             res.sendStatus(200);
         }
         catch (err) {
             next(err);
+        }
+    }
+    async function resendTwoFAEmail(req, res) {
+        const twoFAKey = req.cookies?.[cookies.twoFAKey] ?? '';
+        const pending = await loginService.getPendingTwoFA(twoFAKey);
+        if (pending.status !== login_1.Status.SUCCESS || !pending.user.email || !emailSender) {
+            res.send({ success: false });
+            return;
+        }
+        try {
+            if (development) {
+                console.log(`[kaiauth] (dev) resend 2FA code for ${pending.user.username}: ${pending.code}`);
+            }
+            else {
+                await emailSender.send(pending.user.email, pending.code);
+            }
+            notify(`Resent 2FA code via email for ${pending.user.username} (${req.ip})`);
+            res.send({ success: true, channel: 'email' });
+        }
+        catch (err) {
+            notify(`Failed to resend 2FA code via email for ${pending.user.username}: ${err.message}`);
+            res.sendStatus(500);
         }
     }
     async function logout(req, res, next) {
@@ -89,6 +118,6 @@ function createLoginHandlers(loginService, opts) {
             next(err);
         }
     }
-    return { auth, authTwoFa, logout, verify };
+    return { auth, authTwoFa, resendTwoFAEmail, logout, verify };
 }
 //# sourceMappingURL=login-handlers.js.map

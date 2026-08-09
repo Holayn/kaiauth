@@ -1,5 +1,6 @@
+import type { User } from './user-store';
 export interface TwoFAEntry {
-    username: string;
+    user: User;
     code: string;
 }
 interface TwoFAStoreOptions {
@@ -13,7 +14,7 @@ export declare class TwoFAStore {
     constructor({ codeTtlMs, codeLength }?: TwoFAStoreOptions);
     has(key: string): boolean;
     get(key: string): TwoFAEntry | undefined;
-    create(username: string): {
+    create(user: User): {
         key: string;
         code: string;
     };

@@ -13,8 +13,13 @@
     return '/';
   })();
 
-  const setError = (el, message) => {
+  const setText = (el, message) => {
     el.textContent = message || '';
+  };
+
+  const CHANNEL_LABELS = {
+    discord: 'Code was sent via Discord.',
+    email: 'Code was sent to email.',
   };
 
   const setBusy = (form, busy) => {
@@ -41,7 +46,7 @@
 
   loginForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    setError(loginError, '');
+    setText(loginError, '');
     setBusy(loginForm, true);
     try {
       const username = document.getElementById('username').value;
@@ -49,19 +54,21 @@
       const { ok, data } = await postJson('/auth', { username, password });
 
       if (!ok) {
-        setError(loginError, 'Something went wrong. Please try again.');
+        setText(loginError, 'Something went wrong. Please try again.');
         return;
       }
 
       if (data?.twoFA) {
         loginForm.classList.add('hidden');
         document.getElementById('twofa-form').classList.remove('hidden');
+        setText(twoFASentTo, CHANNEL_LABELS[data.channel]);
+        resendEmailBtn.classList.toggle('hidden', !data.emailFallbackAvailable);
         document.getElementById('twoFACode').focus();
         return;
       }
 
       if (data?.success === false) {
-        setError(loginError, data.reason === 'Locked out'
+        setText(loginError, data.reason === 'Locked out'
           ? 'Too many failed attempts. Try again later.'
           : 'Invalid username or password.');
         return;
@@ -69,38 +76,61 @@
 
       location.href = redirectTo;
     } catch {
-      setError(loginError, 'Something went wrong. Please try again.');
+      setText(loginError, 'Something went wrong. Please try again.');
     } finally {
       setBusy(loginForm, false);
     }
   });
 
   const twoFAForm = document.getElementById('twofa-form');
+  const twoFASentTo = document.getElementById('twofa-sent-to');
   const twoFAError = document.getElementById('twofa-error');
+  const twoFAStatus = document.getElementById('twofa-status');
+  const resendEmailBtn = document.getElementById('resend-email-btn');
 
   twoFAForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    setError(twoFAError, '');
+    setText(twoFAError, '');
     setBusy(twoFAForm, true);
     try {
       const twoFACode = document.getElementById('twoFACode').value;
       const { ok, data } = await postJson('/auth/2fa', { twoFACode });
 
       if (!ok) {
-        setError(twoFAError, 'Something went wrong. Please try again.');
+        setText(twoFAError, 'Something went wrong. Please try again.');
         return;
       }
 
       if (data?.success === false) {
-        setError(twoFAError, 'Invalid code.');
+        setText(twoFAError, 'Invalid code.');
         return;
       }
 
       location.href = redirectTo;
     } catch {
-      setError(twoFAError, 'Something went wrong. Please try again.');
+      setText(twoFAError, 'Something went wrong. Please try again.');
     } finally {
       setBusy(twoFAForm, false);
+    }
+  });
+
+  resendEmailBtn.addEventListener('click', async () => {
+    setText(twoFAError, '');
+    setText(twoFAStatus, '');
+    resendEmailBtn.disabled = true;
+    try {
+      const { ok, data } = await postJson('/auth/2fa/resend-email', {});
+      if (ok && data?.success) {
+        setText(twoFAStatus, 'Code sent via email.');
+        setText(twoFASentTo, CHANNEL_LABELS[data.channel]);
+        setText(resendEmailBtn, 'Resend code via email');
+      } else {
+        setText(twoFAStatus, 'Failed to send verification email.');
+      }
+    } catch {
+      setText(twoFAStatus, 'Failed to send verification email.');
+    } finally {
+      resendEmailBtn.disabled = false;
     }
   });
 })();

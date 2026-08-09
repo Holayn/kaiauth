@@ -8,6 +8,7 @@ kaiauth creates and owns its own SQLite database — it manages user accounts, s
 
 - **Flexible login flow** — credential check → optional 2FA code challenge → session creation
 - **Optional 2FA** — disable with `enable2fa: false` for a simple username/password flow
+- **Built-in 2FA delivery** — email (via [Resend](https://resend.com)) and Discord DM (via `discord.js`), with a `development` mode that logs codes to the console instead of sending them
 - **2FA bypass tokens** — remember trusted devices so users skip 2FA on repeat logins (when 2FA is enabled)
 - **Rate limiting** — in-memory per-user lockout after configurable failed attempts, with a bounded LRU cache for unrecognized usernames to prevent username enumeration
 - **Timing-safe** — random delay on failure and constant-time code comparison
@@ -37,10 +38,19 @@ const { router, requireAuth, userStore } = createAuthRouter({
     ...extra,
   }),
   notify: (message, user) => {
-    // Deliver 2FA codes and log auth events.
-    // When `user` is set, deliver the code (message) to that user.
+    // Audit log for auth events (logins, lockouts, 2FA delivery failures, etc).
     console.log(`[${user || 'auth'}] ${message}`);
   },
+  // At least one of `email` / `discord` is required when 2FA is enabled,
+  // unless `development` is set — see the Options table below.
+  email: {
+    apiKey: process.env.RESEND_API_KEY,
+    from: 'no-reply@yourapp.com',
+  },
+  discord: {
+    botToken: process.env.DISCORD_BOT_TOKEN,
+  },
+  development: process.env.NODE_ENV !== 'production',
 });
 
 app.use(router);
@@ -51,6 +61,16 @@ app.get('/api/data', requireAuth, (req, res) => {
 });
 ```
 
+## 2FA Code Delivery
+
+When a user has a `discord` ID on file, their code is delivered **only** via Discord DM by default. Otherwise, if they have an `email` on file and `email` is configured, the code is delivered via email. **If neither applies — the user has no email/Discord ID on file, or the matching channel isn't configured — delivery fails and `POST /auth` responds `500`.** There is no silent fallback to `notify`; `notify` is audit-log-only.
+
+A user who defaulted to Discord delivery can request the same pending code be re-sent via email instead by calling `POST /auth/2fa/resend-email` (no body — it uses the existing `twoFAKey` cookie). The login page's 2FA form shows a "Send code via email instead" link automatically when this is available (i.e. the user has an email on file and `email` is configured).
+
+If code delivery fails outright (no channel available for the user, or the configured channel throws — e.g. Discord API error, Resend API error), `POST /auth` responds `500` rather than silently reporting success with an undelivered code. This means every user who might log in needs an `email` or `discord` value on file — set via `UserStore.setEmail`/`setDiscord` or the CLI's `update-user` command — once `enable2fa` is on and `development` is off.
+
+Set `development: true` to skip real delivery entirely — codes are logged to the console instead. This is also what allows `enable2fa: true` without configuring `email`/`discord`; **`createAuthRouter` throws at construction time if `enable2fa` is true and neither is configured and `development` is not set**, so a delivery misconfiguration is caught immediately rather than surfacing as a `500` for the first real user who logs in.
+
 ## API
 
 ### `createAuthRouter(opts)`
@@ -59,16 +79,20 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 
 #### Options
 
-| Option                       | Type                       | Required | Default | Description                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------- | -------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `authDataDir`                | `string`                   | Yes      | —       | Absolute path to a directory where kaiauth stores its SQLite databases (`auth.db` and `sessions.db`). The directory is created if it does not exist. Must be an absolute path.                                                                                                                                                                                                                                                              |
-| `sessionSecret`              | `string`                   | Yes      | —       | Secret for signing the session cookie.                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `buildCookieOptions`         | `(extra?) => object`       | Yes      | —       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                                                                                                                                                                                                                                                                                                                            |
-| `notify`                     | `(message, user?) => void` | Yes      | —       | Notification callback for auth events. When a 2FA code is issued, called as `notify(code, username)` so the code can be delivered to the user.                                                                                                                                                                                                                                                                                              |
-| `enable2fa`                  | `boolean`                  | No       | `true`  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa` and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned.                                                                                                                                                                                                                       |
-| `loginInvalidUsersCacheSize` | `number`                   | No       | `5000`  | Maximum number of unrecognized usernames tracked for rate limiting. Failed attempts from invalid usernames accumulate in a bounded LRU cache (evicting oldest entries when full) so they receive the same lockout behavior as valid users, preventing username enumeration. Increase for deployments under active enumeration attacks; decrease to reduce memory on constrained systems. The default (5000) takes just under 1MB of memory. |
-| `serveLoginPage`             | `boolean`                  | No       | `false` | When `true`, registers `GET /login` and `GET /login.js`, serving a self-contained login page (with 2FA support) that talks to the `/auth` and `/auth/2fa` endpoints.                                                                                                                                                                                                                                                                        |
-| `loginPageOptions`           | `{ title?: string }`       | No       | —       | Options for the login page. `title` is shown in the `<title>` tag and as the page heading. Defaults to `'Sign in'`. Only relevant when `serveLoginPage` is `true`.                                                                                                                                                                                                                                                                          |
+| Option                       | Type                                     | Required | Default                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | ---------------------------------------- | -------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authDataDir`                | `string`                                 | Yes      | —                                       | Absolute path to a directory where kaiauth stores its SQLite databases (`auth.db` and `sessions.db`). The directory is created if it does not exist. Must be an absolute path.                                                                                                                                                                                                                                                              |
+| `sessionSecret`              | `string`                                 | Yes      | —                                       | Secret for signing the session cookie.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `buildCookieOptions`         | `(extra?) => object`                     | Yes      | —                                       | Builds cookie options for auth cookies (session, and when 2FA is enabled, the 2FA key and bypass token cookies).                                                                                                                                                                                                                                                                                                                            |
+| `notify`                     | `(message, user?) => void`               | Yes      | —                                       | Notification callback for auth events (logins, lockouts, 2FA delivery failures). No longer used for 2FA code delivery once `email`/`discord` is configured — see [2FA Code Delivery](#2fa-code-delivery). Still the delivery mechanism if neither is configured (backward-compatible).                                                                                                                                                      |
+| `enable2fa`                  | `boolean`                                | No       | `true`                                  | When `false`, skips the 2FA challenge entirely — successful credentials create a session immediately. The `/auth/2fa`, `/auth/2fa/resend-email`, and `/auth/revoke-2fa-bypass` routes are not registered and `bypassTokenStore` is not returned.                                                                                                                                                                                            |
+| `development`                | `boolean`                                | No       | `false`                                 | Skips real 2FA delivery — codes are logged to the console instead. Also the only way to enable `enable2fa: true` without configuring `email`/`discord`.                                                                                                                                                                                                                                                                                     |
+| `email`                      | `{ apiKey, from, subject?, buildBody? }` | No       | —                                       | Configures 2FA delivery via [Resend](https://resend.com). `buildBody?: (code) => string` customizes the email body.                                                                                                                                                                                                                                                                                                                         |
+| `discord`                    | `{ botToken: string }`                   | No       | —                                       | Configures 2FA delivery via Discord DM. The bot logs in once at `createAuthRouter` construction time and must share a guild with each target user (or the user must allow DMs from server members).                                                                                                                                                                                                                                         |
+| `twoFAResend`                | `{ maxAttempts?, lockoutMs? }`           | No       | `{ maxAttempts: 3, lockoutMs: 300000 }` | Rate limiting for `POST /auth/2fa/resend-email`, independent of the code-verification rate limiter.                                                                                                                                                                                                                                                                                                                                         |
+| `loginInvalidUsersCacheSize` | `number`                                 | No       | `5000`                                  | Maximum number of unrecognized usernames tracked for rate limiting. Failed attempts from invalid usernames accumulate in a bounded LRU cache (evicting oldest entries when full) so they receive the same lockout behavior as valid users, preventing username enumeration. Increase for deployments under active enumeration attacks; decrease to reduce memory on constrained systems. The default (5000) takes just under 1MB of memory. |
+| `serveLoginPage`             | `boolean`                                | No       | `false`                                 | When `true`, registers `GET /login` and `GET /login.js`, serving a self-contained login page (with 2FA support) that talks to the `/auth` and `/auth/2fa` endpoints.                                                                                                                                                                                                                                                                        |
+| `loginPageOptions`           | `{ title?: string }`                     | No       | —                                       | Options for the login page. `title` is shown in the `<title>` tag and as the page heading. Defaults to `'Sign in'`. Only relevant when `serveLoginPage` is `true`.                                                                                                                                                                                                                                                                          |
 
 #### Return Value
 
@@ -86,14 +110,15 @@ Returns `{ router, requireAuth, loginService, sessionStore, bypassTokenStore, us
 
 All routes are mounted under `/auth`:
 
-| Method | Path                            | Auth | 2FA only | Body                     | Description                                                                                                                                       |
-| ------ | ------------------------------- | ---- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/auth`                         | No   |          | `{ username, password }` | Login — validates credentials. With 2FA enabled, returns `{ twoFA: true }` if a code challenge is required; otherwise creates a session directly. |
-| POST   | `/auth/2fa`                     | No   | Yes      | `{ twoFACode }`          | Verify 2FA code and create session.                                                                                                               |
-| POST   | `/auth/logout`                  | Yes  |          | —                        | Destroy the session.                                                                                                                              |
-| GET    | `/auth/verify`                  | Yes  |          | —                        | Verify & refresh an existing session.                                                                                                             |
-| POST   | `/auth/invalidate-all-sessions` | Yes  |          | —                        | Wipe all sessions and, when 2FA is enabled, all bypass tokens.                                                                                    |
-| POST   | `/auth/revoke-2fa-bypass`       | Yes  | Yes      | `{ username? }`          | Revoke 2FA bypass tokens (for one user or all).                                                                                                   |
+| Method | Path                            | Auth | 2FA only | Body                     | Description                                                                                                                                                                                                                                                                                                                                |
+| ------ | ------------------------------- | ---- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| POST   | `/auth`                         | No   |          | `{ username, password }` | Login — validates credentials. With 2FA enabled, returns `{ twoFA: true, channel, emailFallbackAvailable }` if a code challenge is required (`channel` is `'discord'`, `'email'`, or `'development'` — delivering the code per [2FA Code Delivery](#2fa-code-delivery), or `500` if delivery fails); otherwise creates a session directly. |
+| POST   | `/auth/2fa`                     | No   | Yes      | `{ twoFACode }`          | Verify 2FA code and create session.                                                                                                                                                                                                                                                                                                        |
+| POST   | `/auth/2fa/resend-email`        | No   | Yes      | —                        | Re-send the pending code via email (uses the `twoFAKey` cookie, not a request body). `{ success: true, channel: 'email' }` on success; `{ success: false }` if not applicable (no pending code, no email on file, not configured); `500` if the send itself fails.                                                                         |
+| POST   | `/auth/logout`                  | Yes  |          | —                        | Destroy the session.                                                                                                                                                                                                                                                                                                                       |
+| GET    | `/auth/verify`                  | Yes  |          | —                        | Verify & refresh an existing session.                                                                                                                                                                                                                                                                                                      |
+| POST   | `/auth/invalidate-all-sessions` | Yes  |          | —                        | Wipe all sessions and, when 2FA is enabled, all bypass tokens.                                                                                                                                                                                                                                                                             |
+| POST   | `/auth/revoke-2fa-bypass`       | Yes  | Yes      | `{ username? }`          | Revoke 2FA bypass tokens (for one user or all).                                                                                                                                                                                                                                                                                            |
 
 The login page routes are the exception — they are **not** under `/auth`:
 
@@ -118,19 +143,20 @@ const { UserStore } = require('kaiauth');
 
 const db = new Database(path.join(__dirname, 'data', 'auth.db'));
 const userStore = new UserStore(db);
-userStore.upsert({ username: 'alice', password: 'secret' });
+userStore.insert({ username: 'alice', password: 'secret' });
 db.close();
 ```
 
-| Method                             | Description                                                           |
-| ---------------------------------- | --------------------------------------------------------------------- |
-| `insert({ username, password })`   | Create a new user (password is bcrypt-hashed automatically).          |
-| `upsert({ username, password })`   | Insert or overwrite a user (password is bcrypt-hashed automatically). |
-| `authenticate(username, password)` | Validate credentials. Returns `{ id, username }` or `null`.           |
-| `setPassword(username, password)`  | Update a user's password (bcrypt-hashed automatically).               |
-| `exists(username)`                 | Returns `true` if the username exists.                                |
-| `getByUsername(username)`          | Look up user by username (without password).                          |
-| `findAll()`                        | List all users (without passwords).                                   |
+| Method                             | Description                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `insert({ username, password })`   | Create a new user (password is bcrypt-hashed automatically).                 |
+| `authenticate(username, password)` | Validate credentials. Returns `{ id, username, email, discord }` or `null`.  |
+| `setPassword(username, password)`  | Update a user's password (bcrypt-hashed automatically).                      |
+| `setEmail(username, email)`        | Set (or, with `null`/`''`, clear) a user's email address for 2FA delivery.   |
+| `setDiscord(username, discordId)`  | Set (or, with `null`/`''`, clear) a user's Discord user ID for 2FA delivery. |
+| `exists(username)`                 | Returns `true` if the username exists.                                       |
+| `getByUsername(username)`          | Look up user by username (without password).                                 |
+| `findAll()`                        | List all users (without passwords).                                          |
 
 ### CLI
 
@@ -140,17 +166,18 @@ kaiauth ships a `kaiauth` CLI for managing users directly against the auth datab
 npx kaiauth <command> --db <path-to-auth.db>
 ```
 
-| Command                               | Description     |
-| ------------------------------------- | --------------- |
-| `add-user <username> <password> --db` | Add a new user. |
-| `list-users --db`                     | List all users. |
-
-`add-user` updates the password if the username already exists.
+| Command                                                          | Description                                                                                                                                                 |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add-user <username> <password> --db [--email] [--discord]`      | Add a new user, optionally with email/Discord for 2FA delivery. Fails if the username already exists.                                                       |
+| `update-user <username> --db [--password] [--email] [--discord]` | Update one or more fields on an existing user. `--email`/`--discord` accept `""` to clear. Fails if the username doesn't exist or no field flags are given. |
+| `list-users --db`                                                | List all users.                                                                                                                                             |
 
 **Example**
 
 ```sh
-npx kaiauth add-user alice hunter2 --db ./data/auth.db
+npx kaiauth add-user alice hunter2 --db ./data/auth.db --email alice@example.com
+npx kaiauth update-user alice --db ./data/auth.db --discord 123456789012345678
+npx kaiauth update-user alice --db ./data/auth.db --password newpassword
 npx kaiauth list-users --db ./data/auth.db
 ```
 
@@ -177,14 +204,17 @@ Manages the `twofa_bypass_token` table. Available on the return value as `bypass
 
 These modules are used internally by `createAuthRouter` and are not re-exported from the package entry point:
 
-| Module                | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| `LoginService`        | Framework-agnostic login + 2FA service class.   |
-| `createLoginHandlers` | Factory for Express route handlers.             |
-| `RateLimiter`         | Generic in-memory rate limiter with lockout.    |
-| `TwoFAStore`          | In-memory 2FA code store with auto-expiry.      |
-| `regenerateSession`   | Promise wrapper for `req.session.regenerate()`. |
-| `destroySession`      | Promise wrapper for session destruction.        |
+| Module                | Description                                                                     |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `LoginService`        | Framework-agnostic login + 2FA service class.                                   |
+| `createLoginHandlers` | Factory for Express route handlers.                                             |
+| `RateLimiter`         | Generic in-memory rate limiter with lockout.                                    |
+| `TwoFAStore`          | In-memory 2FA code store with auto-expiry.                                      |
+| `deliverTwoFACode`    | Orchestrates 2FA channel selection (dev → discord → email → `notify` fallback). |
+| `DiscordSender`       | Persistent `discord.js` client wrapper for DM delivery.                         |
+| `EmailSender`         | Resend-backed email delivery for 2FA codes.                                     |
+| `regenerateSession`   | Promise wrapper for `req.session.regenerate()`.                                 |
+| `destroySession`      | Promise wrapper for session destruction.                                        |
 
 ## License
 
