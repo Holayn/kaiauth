@@ -27,11 +27,9 @@ function renderLoginPageHtml(title = 'Sign in', apiBasePath) {
         throw new Error(`loginPageOptions.apiBasePath is invalid: ${JSON.stringify(apiBasePath)}. Expected a path starting with "/" containing only letters, digits, and -._~/`);
     }
     const escaped = escapeHtml(title);
-    // Safe to embed directly: API_BASE_PATH_RE already rules out quotes/backslashes/markup,
-    // so this can't need any escaping beyond what JSON.stringify does for a plain string.
-    const apiBasePathJson = JSON.stringify(apiBasePath ?? null);
+    const apiBasePathAttr = apiBasePath ?? '';
     return HTML_TEMPLATE
         .replace(/__TITLE__/g, () => escaped)
-        .replace('__API_BASE_PATH_JSON__', () => apiBasePathJson);
+        .replace('__API_BASE_PATH_ATTR__', () => apiBasePathAttr);
 }
 //# sourceMappingURL=login-page.js.map

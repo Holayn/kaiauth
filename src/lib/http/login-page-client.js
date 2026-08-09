@@ -1,11 +1,10 @@
 (() => {
-  // Prefer the server-configured API base (loginPageOptions.apiBasePath) — required when
-  // the page router and API router are mounted at different paths. Falls back to inferring
-  // it from the page's own URL (stripping the ".../login" suffix), which only works when
-  // both routers share the same mount prefix.
-  const base = typeof window.__KAIAUTH_API_BASE__ === 'string'
-    ? window.__KAIAUTH_API_BASE__
-    : location.pathname.replace(/\/login\/?$/, '');
+  // Prefer the server-configured API base (loginPageOptions.apiBasePath), read from a <data>
+  // element rather than an inline <script> assignment so the page works under a CSP that
+  // disallows inline scripts. Falls back to inferring it from the page's own URL (stripping
+  // the ".../login" suffix), which only works when both routers share the same mount prefix.
+  const configuredBase = document.getElementById('kaiauth-config')?.getAttribute('value');
+  const base = configuredBase || location.pathname.replace(/\/login\/?$/, '');
 
   const redirectTo = (() => {
     const params = new URLSearchParams(location.search);

@@ -13,19 +13,24 @@ describe('renderLoginPageHtml', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 
-  it('embeds null for the API base when apiBasePath is omitted', () => {
+  it('embeds an empty value attribute for the API base when apiBasePath is omitted', () => {
     const html = renderLoginPageHtml();
-    expect(html).toContain('window.__KAIAUTH_API_BASE__ = null;');
+    expect(html).toContain('<data id="kaiauth-config" value="" hidden></data>');
   });
 
-  it('embeds a valid apiBasePath as a JSON string', () => {
+  it('embeds a valid apiBasePath as the value attribute', () => {
     const html = renderLoginPageHtml('Sign in', '/api');
-    expect(html).toContain('window.__KAIAUTH_API_BASE__ = "/api";');
+    expect(html).toContain('<data id="kaiauth-config" value="/api" hidden></data>');
   });
 
   it('accepts a multi-segment path', () => {
     const html = renderLoginPageHtml('Sign in', '/v2/auth');
-    expect(html).toContain('window.__KAIAUTH_API_BASE__ = "/v2/auth";');
+    expect(html).toContain('<data id="kaiauth-config" value="/v2/auth" hidden></data>');
+  });
+
+  it('does not embed apiBasePath via an inline script (CSP-friendly)', () => {
+    const html = renderLoginPageHtml('Sign in', '/api');
+    expect(html).not.toMatch(/<script>[^<]*__KAIAUTH_API_BASE__/);
   });
 
   it.each([

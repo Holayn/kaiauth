@@ -15,7 +15,7 @@ kaiauth creates and owns its own SQLite database — it manages user accounts, s
 - **Own SQLite database** — manages `user` and (when 2FA is enabled) `twofa_bypass_token` tables internally
 - **SQLite sessions** — persistent session storage backed by SQLite
 - **Bcrypt passwords** — with automatic migration from legacy SHA-256 hashes
-- **Optional login page** — a dependency-free, framework-free HTML/JS login (and 2FA) page served at `/login`, disabled by default
+- **Optional login page** — a dependency-free, framework-free HTML/JS login (and 2FA) page served at `/login`, disabled by default. No inline `<script>` — works under a CSP that disallows `'unsafe-inline'`
 
 ## Quick Start
 
