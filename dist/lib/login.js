@@ -16,6 +16,8 @@ exports.Status = Object.freeze({
     SUCCESS: 'success',
     FAILED: 'failed',
     FAILED_LOCKED_OUT: 'failed_locked_out',
+    FAILED_TWO_FA_LOCKED: 'failed_2fa_locked',
+    FAILED_TWO_FA_EXPIRED: 'failed_2fa_expired',
 });
 class LoginService {
     constructor(opts) {
@@ -69,12 +71,18 @@ class LoginService {
         return { status: exports.Status.SUCCESS, user };
     }
     async verifyTwoFA(twoFAKey, twoFACode) {
-        if (!twoFAKey || !this._twoFALimiter?.canAttempt(twoFAKey)) {
+        if (!twoFAKey) {
             return { status: exports.Status.FAILED };
         }
-        this._twoFALimiter.recordAttempt(twoFAKey);
+        if (!this._twoFALimiter?.canAttempt(twoFAKey)) {
+            return { status: exports.Status.FAILED_TWO_FA_LOCKED };
+        }
         const entry = this._twoFAStore.get(twoFAKey);
-        if (!entry || !(0, utils_1.timingSafeCompare)(twoFACode, entry.code)) {
+        if (!entry) {
+            return { status: exports.Status.FAILED_TWO_FA_EXPIRED };
+        }
+        this._twoFALimiter.recordAttempt(twoFAKey);
+        if (!(0, utils_1.timingSafeCompare)(twoFACode, entry.code)) {
             return { status: exports.Status.FAILED };
         }
         this._twoFALimiter.clearAttempts(twoFAKey);

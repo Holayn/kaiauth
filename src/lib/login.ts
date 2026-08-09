@@ -14,6 +14,8 @@ export const Status = Object.freeze({
   SUCCESS: 'success',
   FAILED: 'failed',
   FAILED_LOCKED_OUT: 'failed_locked_out',
+  FAILED_TWO_FA_LOCKED: 'failed_2fa_locked',
+  FAILED_TWO_FA_EXPIRED: 'failed_2fa_expired',
 } as const);
 
 export type AuthResult =
@@ -25,7 +27,9 @@ export type AuthResult =
 
 export type TwoFAResult =
   | { status: typeof Status.SUCCESS; user: User; bypassToken: string; bypassMaxAge: number }
-  | { status: typeof Status.FAILED };
+  | { status: typeof Status.FAILED }
+  | { status: typeof Status.FAILED_TWO_FA_LOCKED }
+  | { status: typeof Status.FAILED_TWO_FA_EXPIRED };
 
 export interface LoginServiceOptions {
   getUser: (username: string, password: string) => User | null;
@@ -125,14 +129,23 @@ export class LoginService {
   }
 
   async verifyTwoFA(twoFAKey: string, twoFACode: string): Promise<TwoFAResult> {
-    if (!twoFAKey || !this._twoFALimiter?.canAttempt(twoFAKey)) {
+    if (!twoFAKey) {
       return { status: Status.FAILED };
+    }
+
+    if (!this._twoFALimiter?.canAttempt(twoFAKey)) {
+      return { status: Status.FAILED_TWO_FA_LOCKED };
+    }
+
+    const entry = this._twoFAStore!.get(twoFAKey);
+
+    if (!entry) {
+      return { status: Status.FAILED_TWO_FA_EXPIRED };
     }
 
     this._twoFALimiter.recordAttempt(twoFAKey);
 
-    const entry = this._twoFAStore!.get(twoFAKey);
-    if (!entry || !timingSafeCompare(twoFACode, entry.code)) {
+    if (!timingSafeCompare(twoFACode, entry.code)) {
       return { status: Status.FAILED };
     }
 

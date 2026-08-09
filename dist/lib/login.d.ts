@@ -6,6 +6,8 @@ export declare const Status: Readonly<{
     readonly SUCCESS: "success";
     readonly FAILED: "failed";
     readonly FAILED_LOCKED_OUT: "failed_locked_out";
+    readonly FAILED_TWO_FA_LOCKED: "failed_2fa_locked";
+    readonly FAILED_TWO_FA_EXPIRED: "failed_2fa_expired";
 }>;
 export type AuthResult = {
     status: typeof Status.TWO_FA_REQUIRED;
@@ -30,6 +32,10 @@ export type TwoFAResult = {
     bypassMaxAge: number;
 } | {
     status: typeof Status.FAILED;
+} | {
+    status: typeof Status.FAILED_TWO_FA_LOCKED;
+} | {
+    status: typeof Status.FAILED_TWO_FA_EXPIRED;
 };
 export interface LoginServiceOptions {
     getUser: (username: string, password: string) => User | null;
@@ -60,6 +66,8 @@ export declare class LoginService {
         readonly SUCCESS: "success";
         readonly FAILED: "failed";
         readonly FAILED_LOCKED_OUT: "failed_locked_out";
+        readonly FAILED_TWO_FA_LOCKED: "failed_2fa_locked";
+        readonly FAILED_TWO_FA_EXPIRED: "failed_2fa_expired";
     }>;
     private _getUser;
     private _enable2fa;

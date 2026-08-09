@@ -99,6 +99,11 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
       return;
     }
 
+    if (result.status === Status.FAILED_TWO_FA_EXPIRED || result.status === Status.FAILED_TWO_FA_LOCKED) {
+      res.send({ success: false, mustRetry: true });
+      return;
+    }
+
     notify(`${result.user.username} passed 2FA, logging in (${req.ip})`);
     res.cookie(cookies.twoFAKey, '', buildCookieOptions({ maxAge: 0 }));
     res.cookie(cookies.bypass, result.bypassToken, buildCookieOptions({ maxAge: result.bypassMaxAge }));

@@ -59,8 +59,9 @@
       }
 
       if (data?.twoFA) {
+        resetTwoFAForm();
         loginForm.classList.add('hidden');
-        document.getElementById('twofa-form').classList.remove('hidden');
+        twoFAForm.classList.remove('hidden');
         setText(twoFASentTo, CHANNEL_LABELS[data.channel]);
         resendEmailBtn.classList.toggle('hidden', !data.emailFallbackAvailable);
         document.getElementById('twoFACode').focus();
@@ -88,6 +89,18 @@
   const twoFAStatus = document.getElementById('twofa-status');
   const resendEmailBtn = document.getElementById('resend-email-btn');
 
+  // Clears the 2FA form back to its pristine state — used both when a fresh challenge
+  // starts (in case stale state lingers from a prior attempt on this same page load) and
+  // when mustRetry sends the user back to the username/password form.
+  const resetTwoFAForm = () => {
+    document.getElementById('twoFACode').value = '';
+    setText(twoFAError, '');
+    setText(twoFAStatus, '');
+    setText(twoFASentTo, '');
+    resendEmailBtn.classList.add('hidden');
+    setText(resendEmailBtn, 'Send code via email instead');
+  };
+
   twoFAForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     setText(twoFAError, '');
@@ -102,6 +115,15 @@
       }
 
       if (data?.success === false) {
+        if (data.mustRetry) {
+          resetTwoFAForm();
+          twoFAForm.classList.add('hidden');
+          loginForm.classList.remove('hidden');
+          setText(loginError, 'Your session expired or had too many attempts. Please sign in again.');
+          document.getElementById('password').value = '';
+          document.getElementById('username').focus();
+          return;
+        }
         setText(twoFAError, 'Invalid code.');
         return;
       }

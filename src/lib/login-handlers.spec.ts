@@ -132,3 +132,89 @@ describe('login-handlers delivery failure handling', () => {
     expect(res.body).toEqual({ success: false });
   });
 });
+
+describe('login-handlers authTwoFa mustRetry handling', () => {
+  it('responds success:false with no mustRetry for a plain wrong code', async () => {
+    const loginService = {
+      verifyTwoFA: vi.fn().mockResolvedValue({ status: Status.FAILED }),
+    } as unknown as LoginService;
+
+    const { authTwoFa } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+    });
+
+    const res = fakeRes();
+    await authTwoFa(fakeReq({ twoFACode: 'WRONGCODE' }, { TWOFAKEY: 'key' }), res as never, vi.fn());
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ success: false });
+  });
+
+  it('responds success:false with mustRetry:true when the 2FA session has expired', async () => {
+    const loginService = {
+      verifyTwoFA: vi.fn().mockResolvedValue({ status: Status.FAILED_TWO_FA_EXPIRED }),
+    } as unknown as LoginService;
+
+    const { authTwoFa } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+    });
+
+    const res = fakeRes();
+    await authTwoFa(fakeReq({ twoFACode: '123456' }, { TWOFAKEY: 'stale' }), res as never, vi.fn());
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ success: false, mustRetry: true });
+  });
+
+  it('responds success:false with mustRetry:true when the 2FA session is locked out', async () => {
+    const loginService = {
+      verifyTwoFA: vi.fn().mockResolvedValue({ status: Status.FAILED_TWO_FA_LOCKED }),
+    } as unknown as LoginService;
+
+    const { authTwoFa } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+    });
+
+    const res = fakeRes();
+    await authTwoFa(fakeReq({ twoFACode: '123456' }, { TWOFAKEY: 'locked' }), res as never, vi.fn());
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ success: false, mustRetry: true });
+  });
+
+  it('regenerates the session and responds 200 on success', async () => {
+    const loginService = {
+      verifyTwoFA: vi.fn().mockResolvedValue({
+        status: Status.SUCCESS,
+        user,
+        bypassToken: 'bypass-token',
+        bypassMaxAge: 1000,
+      }),
+    } as unknown as LoginService;
+
+    const notify = vi.fn();
+    const { authTwoFa } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify,
+    });
+
+    const res = fakeRes();
+    const req = {
+      body: { twoFACode: '123456' },
+      cookies: { TWOFAKEY: 'key' },
+      ip: '127.0.0.1',
+      session: {
+        regenerate: (cb: (err?: Error) => void) => cb(),
+        save: (cb: (err?: Error) => void) => cb(),
+      },
+    };
+
+    await authTwoFa(req as never, res as never, vi.fn());
+
+    expect(res.statusCode).toBe(200);
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('passed 2FA'));
+  });
+});
