@@ -6,14 +6,11 @@
   const configuredBase = document.getElementById('kaiauth-config')?.getAttribute('value');
   const base = configuredBase || location.pathname.replace(/\/login\/?$/, '');
 
-  const redirectTo = (() => {
-    const params = new URLSearchParams(location.search);
-    const target = params.get('redirect');
-    if (target && target.startsWith('/') && !target.startsWith('//')) {
-      return target;
-    }
-    return '/';
-  })();
+  // Read off our own URL and forward to the server below — it's the only thing that knows
+  // this. The server decides whether it's actually safe to use (falling back to its own
+  // configured default otherwise) and hands the final answer back as `redirectTo`; this page
+  // just navigates wherever the response says, rather than re-deriving/validating it here.
+  const requestedRedirect = new URLSearchParams(location.search).get('redirect') || undefined;
 
   const setText = (el, message) => {
     el.textContent = message || '';
@@ -53,7 +50,7 @@
     try {
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
-      const { ok, data } = await postJson('/auth', { username, password });
+      const { ok, data } = await postJson('/auth', { username, password, redirect: requestedRedirect });
 
       if (!ok) {
         setText(loginError, 'Something went wrong. Please try again.');
@@ -77,7 +74,7 @@
         return;
       }
 
-      location.href = redirectTo;
+      location.href = data.redirectTo;
     } catch {
       setText(loginError, 'Something went wrong. Please try again.');
     } finally {
@@ -109,7 +106,7 @@
     setBusy(twoFAForm, true);
     try {
       const twoFACode = document.getElementById('twoFACode').value;
-      const { ok, data } = await postJson('/auth/2fa', { twoFACode });
+      const { ok, data } = await postJson('/auth/2fa', { twoFACode, redirect: requestedRedirect });
 
       if (!ok) {
         setText(twoFAError, 'Something went wrong. Please try again.');
@@ -130,7 +127,7 @@
         return;
       }
 
-      location.href = redirectTo;
+      location.href = data.redirectTo;
     } catch {
       setText(twoFAError, 'Something went wrong. Please try again.');
     } finally {

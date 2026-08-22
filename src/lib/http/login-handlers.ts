@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction, RequestHandler, CookieOptions } f
 import { LoginService, Status } from '../login';
 import { destroySession, regenerateSession } from './session-utils';
 import { deliverTwoFACode } from '../delivery/two-fa-delivery';
+import { isSameOriginPath } from '../utils';
 import type { EmailSender } from '../delivery/email-sender';
 import type { DiscordSender } from '../delivery/discord-sender';
 
@@ -16,6 +17,8 @@ interface LoginHandlersOptions {
   development?: boolean;
   emailSender?: EmailSender;
   discordSender?: DiscordSender;
+  /** Fallback for `resolveRedirect` when the request has no valid `redirect` field. */
+  defaultRedirect?: string;
 }
 
 interface LoginHandlers {
@@ -27,8 +30,16 @@ interface LoginHandlers {
 }
 
 export function createLoginHandlers(loginService: LoginService, opts: LoginHandlersOptions): LoginHandlers {
-  const { buildCookieOptions, notify = () => {}, development, emailSender, discordSender } = opts;
+  const { buildCookieOptions, notify = () => {}, development, emailSender, discordSender, defaultRedirect = '/' } = opts;
   const cookies = DEFAULT_COOKIE_NAMES;
+
+  // The client can't know in advance where it's safe to land (that's a server-side policy
+  // decision), so it just forwards whatever `redirect` it read off its own URL — untrusted,
+  // and validated here on every request rather than trusted from the client's own check.
+  function resolveRedirect(body: unknown): string {
+    const raw = (body as { redirect?: unknown } | undefined)?.redirect;
+    return typeof raw === 'string' && isSameOriginPath(raw) ? raw : defaultRedirect;
+  }
 
   async function auth(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { username, password } = req.body as { username: string; password: string };
@@ -53,7 +64,7 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
       notify(`${result.user.username} logged in with 2FA bypass (${req.ip})`);
       try {
         await regenerateSession(req, { username: result.user.username });
-        res.sendStatus(200);
+        res.send({ success: true, redirectTo: resolveRedirect(req.body) });
       } catch (err) {
         next(err);
       }
@@ -78,7 +89,7 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
       notify(`${result.user.username} logged in (${req.ip})`);
       try {
         await regenerateSession(req, { username: result.user.username });
-        res.sendStatus(200);
+        res.send({ success: true, redirectTo: resolveRedirect(req.body) });
       } catch (err) {
         next(err);
       }
@@ -110,7 +121,7 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
 
     try {
       await regenerateSession(req, { username: result.user.username });
-      res.sendStatus(200);
+      res.send({ success: true, redirectTo: resolveRedirect(req.body) });
     } catch (err) {
       next(err);
     }

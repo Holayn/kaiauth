@@ -218,3 +218,122 @@ describe('login-handlers authTwoFa mustRetry handling', () => {
     expect(notify).toHaveBeenCalledWith(expect.stringContaining('passed 2FA'));
   });
 });
+
+describe('login-handlers redirectTo resolution', () => {
+  function sessionReq(body: Record<string, unknown>) {
+    return {
+      body,
+      cookies: {},
+      ip: '127.0.0.1',
+      session: {
+        regenerate: (cb: (err?: Error) => void) => cb(),
+        save: (cb: (err?: Error) => void) => cb(),
+      },
+    };
+  }
+
+  it('auth() falls back to "/" when defaultRedirect is unset and no redirect is requested', async () => {
+    const loginService = {
+      authenticate: vi.fn().mockResolvedValue({ status: Status.SUCCESS, user }),
+    } as unknown as LoginService;
+
+    const { auth } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+    });
+
+    const res = fakeRes();
+    await auth(sessionReq({ username: 'alice', password: 'pw' }) as never, res as never, vi.fn());
+
+    expect(res.body).toEqual({ success: true, redirectTo: '/' });
+  });
+
+  it('auth() uses the configured defaultRedirect when no redirect is requested', async () => {
+    const loginService = {
+      authenticate: vi.fn().mockResolvedValue({ status: Status.SUCCESS, user }),
+    } as unknown as LoginService;
+
+    const { auth } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+      defaultRedirect: '/admin',
+    });
+
+    const res = fakeRes();
+    await auth(sessionReq({ username: 'alice', password: 'pw' }) as never, res as never, vi.fn());
+
+    expect(res.body).toEqual({ success: true, redirectTo: '/admin' });
+  });
+
+  it('auth() echoes back a valid requested redirect, overriding defaultRedirect', async () => {
+    const loginService = {
+      authenticate: vi.fn().mockResolvedValue({ status: Status.SUCCESS, user }),
+    } as unknown as LoginService;
+
+    const { auth } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+      defaultRedirect: '/admin',
+    });
+
+    const res = fakeRes();
+    await auth(sessionReq({ username: 'alice', password: 'pw', redirect: '/admin/orders' }) as never, res as never, vi.fn());
+
+    expect(res.body).toEqual({ success: true, redirectTo: '/admin/orders' });
+  });
+
+  it.each([
+    ['protocol-relative (open redirect)', '//evil.com'],
+    ['missing leading slash', 'admin'],
+    ['not a string', 123],
+  ])('auth() ignores an unsafe requested redirect (%s) and falls back to defaultRedirect', async (_label, redirect) => {
+    const loginService = {
+      authenticate: vi.fn().mockResolvedValue({ status: Status.SUCCESS, user }),
+    } as unknown as LoginService;
+
+    const { auth } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+      defaultRedirect: '/admin',
+    });
+
+    const res = fakeRes();
+    await auth(sessionReq({ username: 'alice', password: 'pw', redirect }) as never, res as never, vi.fn());
+
+    expect(res.body).toEqual({ success: true, redirectTo: '/admin' });
+  });
+
+  it('auth() resolves redirectTo on a 2FA bypass login', async () => {
+    const loginService = {
+      authenticate: vi.fn().mockResolvedValue({ status: Status.BYPASSED, user }),
+    } as unknown as LoginService;
+
+    const { auth } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+      defaultRedirect: '/admin',
+    });
+
+    const res = fakeRes();
+    await auth(sessionReq({ username: 'alice', password: 'pw' }) as never, res as never, vi.fn());
+
+    expect(res.body).toEqual({ success: true, redirectTo: '/admin' });
+  });
+
+  it('authTwoFa() resolves redirectTo independently from its own request body', async () => {
+    const loginService = {
+      verifyTwoFA: vi.fn().mockResolvedValue({ status: Status.SUCCESS, user, bypassToken: 'tok', bypassMaxAge: 1000 }),
+    } as unknown as LoginService;
+
+    const { authTwoFa } = createLoginHandlers(loginService, {
+      buildCookieOptions: () => ({}),
+      notify: vi.fn(),
+      defaultRedirect: '/admin',
+    });
+
+    const res = fakeRes();
+    await authTwoFa(sessionReq({ twoFACode: '123456', redirect: '/admin/orders' }) as never, res as never, vi.fn());
+
+    expect(res.body).toEqual({ success: true, redirectTo: '/admin/orders' });
+  });
+});

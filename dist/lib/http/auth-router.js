@@ -17,6 +17,7 @@ const user_store_1 = require("../store/user-store");
 const login_page_1 = require("./login-page");
 const discord_sender_1 = require("../delivery/discord-sender");
 const email_sender_1 = require("../delivery/email-sender");
+const utils_1 = require("../utils");
 function requiredBody(properties) {
     return (req, res, next) => {
         for (const p of properties) {
@@ -29,7 +30,7 @@ function requiredBody(properties) {
     };
 }
 function createAuthRouter(opts) {
-    const { authDataDir, sessionSecret, buildCookieOptions, notify, enable2fa = true, serveLoginPage = false, development, email, discord, } = opts;
+    const { authDataDir, sessionSecret, buildCookieOptions, notify, enable2fa = true, serveLoginPage = false, development, email, discord, defaultRedirect = '/', } = opts;
     if (!path_1.default.isAbsolute(authDataDir)) {
         throw new Error('createAuthRouter requires an absolute path for authDataDir');
     }
@@ -40,6 +41,9 @@ function createAuthRouter(opts) {
         throw new Error('createAuthRouter requires a notify function');
     if (enable2fa && !development && !email && !discord) {
         throw new Error('createAuthRouter requires at least one 2FA delivery method (email or discord) when enable2fa is true, unless development is set');
+    }
+    if (!(0, utils_1.isSameOriginPath)(defaultRedirect)) {
+        throw new Error(`defaultRedirect is invalid: ${JSON.stringify(defaultRedirect)}. Expected a same-origin path starting with a single "/"`);
     }
     fs_1.default.mkdirSync(authDataDir, { recursive: true });
     const discordSender = discord ? new discord_sender_1.DiscordSender(discord) : undefined;
@@ -72,6 +76,7 @@ function createAuthRouter(opts) {
         development,
         emailSender,
         discordSender,
+        defaultRedirect,
     });
     const requireAuth = (req, res, next) => {
         return req.session.user ? next() : res.sendStatus(401);

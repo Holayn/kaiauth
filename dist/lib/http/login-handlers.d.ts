@@ -8,6 +8,8 @@ interface LoginHandlersOptions {
     development?: boolean;
     emailSender?: EmailSender;
     discordSender?: DiscordSender;
+    /** Fallback for `resolveRedirect` when the request has no valid `redirect` field. */
+    defaultRedirect?: string;
 }
 interface LoginHandlers {
     auth: RequestHandler;

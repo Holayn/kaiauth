@@ -4,13 +4,21 @@ exports.createLoginHandlers = createLoginHandlers;
 const login_1 = require("../login");
 const session_utils_1 = require("./session-utils");
 const two_fa_delivery_1 = require("../delivery/two-fa-delivery");
+const utils_1 = require("../utils");
 const DEFAULT_COOKIE_NAMES = {
     twoFAKey: 'TWOFAKEY',
     bypass: 'TWOFABYPASS',
 };
 function createLoginHandlers(loginService, opts) {
-    const { buildCookieOptions, notify = () => { }, development, emailSender, discordSender } = opts;
+    const { buildCookieOptions, notify = () => { }, development, emailSender, discordSender, defaultRedirect = '/' } = opts;
     const cookies = DEFAULT_COOKIE_NAMES;
+    // The client can't know in advance where it's safe to land (that's a server-side policy
+    // decision), so it just forwards whatever `redirect` it read off its own URL — untrusted,
+    // and validated here on every request rather than trusted from the client's own check.
+    function resolveRedirect(body) {
+        const raw = body?.redirect;
+        return typeof raw === 'string' && (0, utils_1.isSameOriginPath)(raw) ? raw : defaultRedirect;
+    }
     async function auth(req, res, next) {
         const { username, password } = req.body;
         const result = await loginService.authenticate(username, password, req.cookies?.[cookies.bypass] ?? null);
@@ -27,7 +35,7 @@ function createLoginHandlers(loginService, opts) {
             notify(`${result.user.username} logged in with 2FA bypass (${req.ip})`);
             try {
                 await (0, session_utils_1.regenerateSession)(req, { username: result.user.username });
-                res.sendStatus(200);
+                res.send({ success: true, redirectTo: resolveRedirect(req.body) });
             }
             catch (err) {
                 next(err);
@@ -51,7 +59,7 @@ function createLoginHandlers(loginService, opts) {
             notify(`${result.user.username} logged in (${req.ip})`);
             try {
                 await (0, session_utils_1.regenerateSession)(req, { username: result.user.username });
-                res.sendStatus(200);
+                res.send({ success: true, redirectTo: resolveRedirect(req.body) });
             }
             catch (err) {
                 next(err);
@@ -77,7 +85,7 @@ function createLoginHandlers(loginService, opts) {
         res.cookie(cookies.bypass, result.bypassToken, buildCookieOptions({ maxAge: result.bypassMaxAge }));
         try {
             await (0, session_utils_1.regenerateSession)(req, { username: result.user.username });
-            res.sendStatus(200);
+            res.send({ success: true, redirectTo: resolveRedirect(req.body) });
         }
         catch (err) {
             next(err);

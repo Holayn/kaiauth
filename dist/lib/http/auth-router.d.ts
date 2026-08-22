@@ -13,6 +13,13 @@ export interface AuthRouterOptions {
     notify: (message: string) => void;
     enable2fa?: boolean;
     loginInvalidUsersCacheSize?: number;
+    /**
+     * Where a successful login lands when the request's `redirect` field is absent or isn't a
+     * safe same-origin path. Returned as `redirectTo` in the `POST /auth` / `POST /auth/2fa`
+     * success response — the built-in login page (and any custom one) navigates there. Must be
+     * a same-origin path starting with a single `/`. Defaults to `/`.
+     */
+    defaultRedirect?: string;
     serveLoginPage?: boolean;
     loginPageOptions?: {
         title?: string;

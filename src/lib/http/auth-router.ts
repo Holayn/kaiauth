@@ -11,6 +11,7 @@ import { UserStore } from '../store/user-store';
 import { renderLoginPageHtml, loginPageJs } from './login-page';
 import { DiscordSender, type DiscordSenderConfig } from '../delivery/discord-sender';
 import { EmailSender, type EmailSenderConfig } from '../delivery/email-sender';
+import { isSameOriginPath } from '../utils';
 
 function requiredBody(properties: string[]): RequestHandler {
   return (req, res, next) => {
@@ -31,6 +32,13 @@ export interface AuthRouterOptions {
   notify: (message: string) => void;
   enable2fa?: boolean;
   loginInvalidUsersCacheSize?: number;
+  /**
+   * Where a successful login lands when the request's `redirect` field is absent or isn't a
+   * safe same-origin path. Returned as `redirectTo` in the `POST /auth` / `POST /auth/2fa`
+   * success response — the built-in login page (and any custom one) navigates there. Must be
+   * a same-origin path starting with a single `/`. Defaults to `/`.
+   */
+  defaultRedirect?: string;
   serveLoginPage?: boolean;
   loginPageOptions?: {
     title?: string;
@@ -79,6 +87,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     development,
     email,
     discord,
+    defaultRedirect = '/',
   } = opts;
 
   if (!path.isAbsolute(authDataDir)) {
@@ -91,6 +100,11 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
   if (enable2fa && !development && !email && !discord) {
     throw new Error(
       'createAuthRouter requires at least one 2FA delivery method (email or discord) when enable2fa is true, unless development is set'
+    );
+  }
+  if (!isSameOriginPath(defaultRedirect)) {
+    throw new Error(
+      `defaultRedirect is invalid: ${JSON.stringify(defaultRedirect)}. Expected a same-origin path starting with a single "/"`
     );
   }
 
@@ -131,6 +145,7 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     development,
     emailSender,
     discordSender,
+    defaultRedirect,
   });
 
   const requireAuth: RequestHandler = (req, res, next) => {

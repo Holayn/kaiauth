@@ -84,4 +84,36 @@ describe('createAuthRouter construction-time validation', () => {
     }).not.toThrow();
     result?.db.close();
   });
+
+  it('does not throw when defaultRedirect is a valid same-origin path', () => {
+    let result;
+    expect(() => {
+      result = createAuthRouter({
+        authDataDir: makeDir(),
+        sessionSecret: 'secret',
+        buildCookieOptions,
+        notify: () => {},
+        enable2fa: false,
+        defaultRedirect: '/admin',
+      });
+    }).not.toThrow();
+    result?.db.close();
+  });
+
+  it.each([
+    ['protocol-relative (open redirect)', '//evil.com'],
+    ['missing leading slash', 'admin'],
+    ['empty string', ''],
+  ])('throws when defaultRedirect is invalid (%s)', (_label, defaultRedirect) => {
+    expect(() =>
+      createAuthRouter({
+        authDataDir: makeDir(),
+        sessionSecret: 'secret',
+        buildCookieOptions,
+        notify: () => {},
+        enable2fa: false,
+        defaultRedirect,
+      }),
+    ).toThrow(/defaultRedirect is invalid/);
+  });
 });
