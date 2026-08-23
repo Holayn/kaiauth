@@ -4,7 +4,7 @@ import { destroySession, regenerateSession } from './session-utils';
 import { deliverTwoFACode, twoFACodeEmail } from '../delivery/two-fa-delivery';
 import { isSameOriginPath } from '../utils';
 import type { SendEmail } from '../delivery/email-sender';
-import type { SendDiscordDM } from '../delivery/discord-sender';
+import type { SendDiscordDM } from 'kai-discord-sender';
 
 const DEFAULT_COOKIE_NAMES = {
   twoFAKey: 'TWOFAKEY',

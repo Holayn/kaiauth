@@ -9,7 +9,7 @@ import { createLoginHandlers } from './login-handlers';
 import { BypassTokenStore } from '../store/bypass-token-store';
 import { UserStore } from '../store/user-store';
 import { renderLoginPageHtml, loginPageJs } from './login-page';
-import { DiscordSender, type DiscordSenderConfig, type SendDiscordDM } from '../delivery/discord-sender';
+import { DiscordSender, type DiscordSenderConfig, type SendDiscordDM } from 'kai-discord-sender';
 import { EmailSender, type EmailSenderConfig, type SendEmail } from '../delivery/email-sender';
 import { isSameOriginPath } from '../utils';
 

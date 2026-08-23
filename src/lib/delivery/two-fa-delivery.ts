@@ -1,6 +1,6 @@
 import type { User } from '../store/user-store';
 import type { SendEmail } from './email-sender';
-import type { SendDiscordDM } from './discord-sender';
+import type { SendDiscordDM } from 'kai-discord-sender';
 
 export type DeliveryChannel = 'discord' | 'email' | 'development';
 

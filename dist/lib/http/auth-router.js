@@ -15,7 +15,7 @@ const login_handlers_1 = require("./login-handlers");
 const bypass_token_store_1 = require("../store/bypass-token-store");
 const user_store_1 = require("../store/user-store");
 const login_page_1 = require("./login-page");
-const discord_sender_1 = require("../delivery/discord-sender");
+const kai_discord_sender_1 = require("kai-discord-sender");
 const email_sender_1 = require("../delivery/email-sender");
 const utils_1 = require("../utils");
 function isDiscordSenderConfig(discord) {
@@ -55,7 +55,7 @@ function createAuthRouter(opts) {
     let sendDiscordDM;
     if (discord) {
         if (isDiscordSenderConfig(discord)) {
-            const sender = new discord_sender_1.DiscordSender(discord);
+            const sender = new kai_discord_sender_1.DiscordSender(discord);
             sendDiscordDM = sender.send.bind(sender);
         }
         else {

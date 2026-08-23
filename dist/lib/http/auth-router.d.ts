@@ -4,7 +4,7 @@ import { SQLiteSessionStore } from '../store/sqlite-session-store';
 import { LoginService } from '../login';
 import { BypassTokenStore } from '../store/bypass-token-store';
 import { UserStore } from '../store/user-store';
-import { type DiscordSenderConfig, type SendDiscordDM } from '../delivery/discord-sender';
+import { type DiscordSenderConfig, type SendDiscordDM } from 'kai-discord-sender';
 import { type EmailSenderConfig, type SendEmail } from '../delivery/email-sender';
 export interface AuthRouterOptions {
     authDataDir: string;

@@ -17,9 +17,9 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "better-sqlite3": ">=9",
-    "discord.js": "^14.16.3",
     "express": "^4.17.0",
     "express-session": "^1.17.3",
+    "kai-discord-sender": "https://github.com/Holayn/discord-messenger-bot/releases/download/1.0.0/kai-discord-sender-1.0.0.tgz",
     "lru-cache": "^11.5.1",
     "resend": "^4.0.1",
     "yargs": "^18.1.0"

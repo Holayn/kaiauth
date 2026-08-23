@@ -1,7 +1,7 @@
 import type { RequestHandler, CookieOptions } from 'express';
 import { LoginService } from '../login';
 import type { SendEmail } from '../delivery/email-sender';
-import type { SendDiscordDM } from '../delivery/discord-sender';
+import type { SendDiscordDM } from 'kai-discord-sender';
 interface LoginHandlersOptions {
     buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
     notify?: (message: string) => void;
