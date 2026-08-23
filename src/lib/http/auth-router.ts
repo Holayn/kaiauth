@@ -9,9 +9,17 @@ import { createLoginHandlers } from './login-handlers';
 import { BypassTokenStore } from '../store/bypass-token-store';
 import { UserStore } from '../store/user-store';
 import { renderLoginPageHtml, loginPageJs } from './login-page';
-import { DiscordSender, type DiscordSenderConfig } from '../delivery/discord-sender';
-import { EmailSender, type EmailSenderConfig } from '../delivery/email-sender';
+import { DiscordSender, type DiscordSenderConfig, type SendDiscordDM } from '../delivery/discord-sender';
+import { EmailSender, type EmailSenderConfig, type SendEmail } from '../delivery/email-sender';
 import { isSameOriginPath } from '../utils';
+
+function isDiscordSenderConfig(discord: DiscordSenderConfig | SendDiscordDM): discord is DiscordSenderConfig {
+  return typeof discord !== 'function';
+}
+
+function isEmailSenderConfig(email: EmailSenderConfig | SendEmail): email is EmailSenderConfig {
+  return typeof email !== 'function';
+}
 
 function requiredBody(properties: string[]): RequestHandler {
   return (req, res, next) => {
@@ -51,8 +59,8 @@ export interface AuthRouterOptions {
     apiBasePath?: string;
   };
   development?: boolean;
-  email?: EmailSenderConfig;
-  discord?: DiscordSenderConfig;
+  email?: EmailSenderConfig | SendEmail;
+  discord?: DiscordSenderConfig | SendDiscordDM;
   twoFAResend?: {
     maxAttempts?: number;
     lockoutMs?: number;
@@ -110,8 +118,25 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
 
   fs.mkdirSync(authDataDir, { recursive: true });
 
-  const discordSender = discord ? new DiscordSender(discord) : undefined;
-  const emailSender = email ? new EmailSender(email) : undefined;
+  let sendDiscordDM: SendDiscordDM | undefined;
+  if (discord) {
+    if (isDiscordSenderConfig(discord)) {
+      const sender = new DiscordSender(discord);
+      sendDiscordDM = sender.send.bind(sender);
+    } else {
+      sendDiscordDM = discord;
+    }
+  }
+
+  let sendEmail: SendEmail | undefined;
+  if (email) {
+    if (isEmailSenderConfig(email)) {
+      const sender = new EmailSender(email);
+      sendEmail = sender.send.bind(sender);
+    } else {
+      sendEmail = email;
+    }
+  }
 
   const db = new Database(path.join(authDataDir, 'auth.db'));
   const userStore = new UserStore(db);
@@ -143,8 +168,8 @@ export function createAuthRouter(opts: AuthRouterOptions): AuthRouterResult {
     buildCookieOptions,
     notify,
     development,
-    emailSender,
-    discordSender,
+    sendEmail,
+    sendDiscordDM,
     defaultRedirect,
   });
 

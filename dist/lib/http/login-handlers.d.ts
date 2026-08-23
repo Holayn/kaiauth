@@ -1,13 +1,13 @@
 import type { RequestHandler, CookieOptions } from 'express';
 import { LoginService } from '../login';
-import type { EmailSender } from '../delivery/email-sender';
-import type { DiscordSender } from '../delivery/discord-sender';
+import type { SendEmail } from '../delivery/email-sender';
+import type { SendDiscordDM } from '../delivery/discord-sender';
 interface LoginHandlersOptions {
     buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
     notify?: (message: string) => void;
     development?: boolean;
-    emailSender?: EmailSender;
-    discordSender?: DiscordSender;
+    sendEmail?: SendEmail;
+    sendDiscordDM?: SendDiscordDM;
     /** Fallback for `resolveRedirect` when the request has no valid `redirect` field. */
     defaultRedirect?: string;
 }

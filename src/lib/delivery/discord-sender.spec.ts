@@ -36,7 +36,7 @@ describe('DiscordSender', () => {
     const send = vi.fn().mockResolvedValue(undefined);
     client.users.fetch.mockResolvedValue({ send });
 
-    const sendPromise = sender.send('123', '654321');
+    const sendPromise = sender.send('123', 'Your verification code is: 654321');
 
     // Not ready yet — fetch must not have been called before the 'ready' event fires.
     await Promise.resolve();
@@ -53,7 +53,7 @@ describe('DiscordSender', () => {
     const sender = new DiscordSender({ botToken: 'bad-token' });
     const client = FakeClient.instances[FakeClient.instances.length - 1];
 
-    const sendPromise = sender.send('123', '654321');
+    const sendPromise = sender.send('123', 'Your verification code is: 654321');
     client.emit('error', new Error('invalid token'));
 
     await expect(sendPromise).rejects.toThrow('invalid token');
@@ -64,7 +64,7 @@ describe('DiscordSender', () => {
     const client = FakeClient.instances[FakeClient.instances.length - 1];
     client.users.fetch.mockResolvedValue({ send: vi.fn().mockRejectedValue(new Error('cannot DM user')) });
 
-    const sendPromise = sender.send('123', '654321');
+    const sendPromise = sender.send('123', 'Your verification code is: 654321');
     client.emit('ready');
 
     await expect(sendPromise).rejects.toThrow('cannot DM user');

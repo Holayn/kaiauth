@@ -12,7 +12,7 @@ describe('EmailSender', () => {
     send.mockResolvedValueOnce({ data: { id: 'abc' }, error: null });
 
     const sender = new EmailSender({ apiKey: 'key', from: 'noreply@example.com' });
-    await sender.send('alice@example.com', '123456');
+    await sender.send('alice@example.com', 'Your verification code', 'Your verification code is: 123456');
 
     expect(send).toHaveBeenCalledWith({
       from: 'noreply@example.com',
@@ -26,6 +26,8 @@ describe('EmailSender', () => {
     send.mockResolvedValueOnce({ data: null, error: { message: 'invalid API key' } });
 
     const sender = new EmailSender({ apiKey: 'bad', from: 'noreply@example.com' });
-    await expect(sender.send('alice@example.com', '123456')).rejects.toThrow('invalid API key');
+    await expect(
+      sender.send('alice@example.com', 'Your verification code', 'Your verification code is: 123456'),
+    ).rejects.toThrow('invalid API key');
   });
 });

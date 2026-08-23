@@ -10,7 +10,7 @@ const DEFAULT_COOKIE_NAMES = {
     bypass: 'TWOFABYPASS',
 };
 function createLoginHandlers(loginService, opts) {
-    const { buildCookieOptions, notify = () => { }, development, emailSender, discordSender, defaultRedirect = '/' } = opts;
+    const { buildCookieOptions, notify = () => { }, development, sendEmail, sendDiscordDM, defaultRedirect = '/' } = opts;
     const cookies = DEFAULT_COOKIE_NAMES;
     // The client can't know in advance where it's safe to land (that's a server-side policy
     // decision), so it just forwards whatever `redirect` it read off its own URL — untrusted,
@@ -46,7 +46,7 @@ function createLoginHandlers(loginService, opts) {
             res.cookie(cookies.twoFAKey, result.twoFAKey, buildCookieOptions());
             notify(`${result.user.username} passed initial auth, 2FA required (${req.ip})`);
             try {
-                const delivery = await (0, two_fa_delivery_1.deliverTwoFACode)(result.user, result.code, { development, emailSender, discordSender });
+                const delivery = await (0, two_fa_delivery_1.deliverTwoFACode)(result.user, result.code, { development, sendEmail, sendDiscordDM });
                 res.send({ twoFA: true, channel: delivery.channel, emailFallbackAvailable: delivery.emailFallbackAvailable });
             }
             catch (err) {
@@ -94,7 +94,7 @@ function createLoginHandlers(loginService, opts) {
     async function resendTwoFAEmail(req, res) {
         const twoFAKey = req.cookies?.[cookies.twoFAKey] ?? '';
         const pending = await loginService.getPendingTwoFA(twoFAKey);
-        if (pending.status !== login_1.Status.SUCCESS || !pending.user.email || !emailSender) {
+        if (pending.status !== login_1.Status.SUCCESS || !pending.user.email || !sendEmail) {
             res.send({ success: false });
             return;
         }
@@ -103,7 +103,8 @@ function createLoginHandlers(loginService, opts) {
                 console.log(`[kaiauth] (dev) resend 2FA code for ${pending.user.username}: ${pending.code}`);
             }
             else {
-                await emailSender.send(pending.user.email, pending.code);
+                const { subject, body } = (0, two_fa_delivery_1.twoFACodeEmail)(pending.code);
+                await sendEmail(pending.user.email, subject, body);
             }
             notify(`Resent 2FA code via email for ${pending.user.username} (${req.ip})`);
             res.send({ success: true, channel: 'email' });

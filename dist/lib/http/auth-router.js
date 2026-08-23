@@ -18,6 +18,12 @@ const login_page_1 = require("./login-page");
 const discord_sender_1 = require("../delivery/discord-sender");
 const email_sender_1 = require("../delivery/email-sender");
 const utils_1 = require("../utils");
+function isDiscordSenderConfig(discord) {
+    return typeof discord !== 'function';
+}
+function isEmailSenderConfig(email) {
+    return typeof email !== 'function';
+}
 function requiredBody(properties) {
     return (req, res, next) => {
         for (const p of properties) {
@@ -46,8 +52,26 @@ function createAuthRouter(opts) {
         throw new Error(`defaultRedirect is invalid: ${JSON.stringify(defaultRedirect)}. Expected a same-origin path starting with a single "/"`);
     }
     fs_1.default.mkdirSync(authDataDir, { recursive: true });
-    const discordSender = discord ? new discord_sender_1.DiscordSender(discord) : undefined;
-    const emailSender = email ? new email_sender_1.EmailSender(email) : undefined;
+    let sendDiscordDM;
+    if (discord) {
+        if (isDiscordSenderConfig(discord)) {
+            const sender = new discord_sender_1.DiscordSender(discord);
+            sendDiscordDM = sender.send.bind(sender);
+        }
+        else {
+            sendDiscordDM = discord;
+        }
+    }
+    let sendEmail;
+    if (email) {
+        if (isEmailSenderConfig(email)) {
+            const sender = new email_sender_1.EmailSender(email);
+            sendEmail = sender.send.bind(sender);
+        }
+        else {
+            sendEmail = email;
+        }
+    }
     const db = new better_sqlite3_1.default(path_1.default.join(authDataDir, 'auth.db'));
     const userStore = new user_store_1.UserStore(db);
     let bypassTokenStore;
@@ -74,8 +98,8 @@ function createAuthRouter(opts) {
         buildCookieOptions,
         notify,
         development,
-        emailSender,
-        discordSender,
+        sendEmail,
+        sendDiscordDM,
         defaultRedirect,
     });
     const requireAuth = (req, res, next) => {

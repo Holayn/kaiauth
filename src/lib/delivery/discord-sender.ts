@@ -4,8 +4,11 @@ export interface DiscordSenderConfig {
   botToken: string;
 }
 
+/** Delivers a message to a Discord user by id. */
+export type SendDiscordDM = (discordUserId: string, message: string) => Promise<void>;
+
 /**
- * Sends 2FA codes as Discord DMs using a single persistent bot connection.
+ * Sends Discord DMs using a single persistent bot connection.
  *
  * The bot must share a guild with the target user (or the user must allow
  * DMs from server members), or `send()` will reject with a Discord API
@@ -26,9 +29,9 @@ export class DiscordSender {
     });
   }
 
-  async send(discordUserId: string, code: string): Promise<void> {
+  async send(discordUserId: string, message: string): Promise<void> {
     await this._ready;
     const user: DiscordUser = await this._client.users.fetch(discordUserId);
-    await user.send(`Your verification code is: ${code}`);
+    await user.send(message);
   }
 }

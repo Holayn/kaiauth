@@ -4,8 +4,8 @@ import { SQLiteSessionStore } from '../store/sqlite-session-store';
 import { LoginService } from '../login';
 import { BypassTokenStore } from '../store/bypass-token-store';
 import { UserStore } from '../store/user-store';
-import { type DiscordSenderConfig } from '../delivery/discord-sender';
-import { type EmailSenderConfig } from '../delivery/email-sender';
+import { type DiscordSenderConfig, type SendDiscordDM } from '../delivery/discord-sender';
+import { type EmailSenderConfig, type SendEmail } from '../delivery/email-sender';
 export interface AuthRouterOptions {
     authDataDir: string;
     sessionSecret: string;
@@ -32,8 +32,8 @@ export interface AuthRouterOptions {
         apiBasePath?: string;
     };
     development?: boolean;
-    email?: EmailSenderConfig;
-    discord?: DiscordSenderConfig;
+    email?: EmailSenderConfig | SendEmail;
+    discord?: DiscordSenderConfig | SendDiscordDM;
     twoFAResend?: {
         maxAttempts?: number;
         lockoutMs?: number;

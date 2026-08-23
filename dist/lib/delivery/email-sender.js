@@ -7,15 +7,15 @@ class EmailSender {
         this._resend = new resend_1.Resend(config.apiKey);
         this._config = config;
     }
-    async send(to, code) {
+    async send(to, subject, body) {
         const { error } = await this._resend.emails.send({
             from: this._config.from,
             to,
-            subject: this._config.subject ?? 'Your verification code',
-            text: this._config.buildBody?.(code) ?? `Your verification code is: ${code}`,
+            subject,
+            text: body,
         });
         if (error) {
-            throw new Error(`Failed to send 2FA email: ${error.message}`);
+            throw new Error(`Failed to send email: ${error.message}`);
         }
     }
 }

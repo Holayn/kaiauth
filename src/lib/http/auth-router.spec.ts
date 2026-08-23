@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -66,6 +66,21 @@ describe('createAuthRouter construction-time validation', () => {
         buildCookieOptions,
         notify: () => {},
         email: { apiKey: 'key', from: 'noreply@example.com' },
+      });
+    }).not.toThrow();
+    result?.db.close();
+  });
+
+  it('accepts a sendDiscordDM callback instead of a bot token', () => {
+    let result;
+    const sendDiscordDM = vi.fn().mockResolvedValue(undefined);
+    expect(() => {
+      result = createAuthRouter({
+        authDataDir: makeDir(),
+        sessionSecret: 'secret',
+        buildCookieOptions,
+        notify: () => {},
+        discord: sendDiscordDM,
       });
     }).not.toThrow();
     result?.db.close();

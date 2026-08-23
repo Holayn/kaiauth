@@ -2,13 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { createLoginHandlers } from './login-handlers';
 import { Status, type LoginService } from '../login';
 import type { User } from '../store/user-store';
-import type { EmailSender } from '../delivery/email-sender';
 
 const user: User = { id: 1, username: 'alice', email: 'alice@example.com', discord: null };
-
-function fakeEmailSender(send: (to: string, code: string) => Promise<void>): EmailSender {
-  return { send } as unknown as EmailSender;
-}
 
 function fakeRes() {
   const res: { statusCode?: number; body?: unknown; sendStatus: (n: number) => void; send: (b: unknown) => void; cookie: () => void } = {
@@ -35,13 +30,13 @@ describe('login-handlers delivery failure handling', () => {
       }),
     } as unknown as LoginService;
 
-    const discordSender = { send: vi.fn().mockRejectedValue(new Error('discord down')) };
+    const sendDiscordDM = vi.fn().mockRejectedValue(new Error('discord down'));
     const notify = vi.fn();
 
     const { auth } = createLoginHandlers(loginService, {
       buildCookieOptions: () => ({}),
       notify,
-      discordSender: discordSender as never,
+      sendDiscordDM,
     });
 
     const res = fakeRes();
@@ -64,7 +59,7 @@ describe('login-handlers delivery failure handling', () => {
     const { auth } = createLoginHandlers(loginService, {
       buildCookieOptions: () => ({}),
       notify: vi.fn(),
-      emailSender: fakeEmailSender(vi.fn()),
+      sendEmail: vi.fn(),
       development: true,
     });
 
@@ -83,7 +78,7 @@ describe('login-handlers delivery failure handling', () => {
     const { resendTwoFAEmail } = createLoginHandlers(loginService, {
       buildCookieOptions: () => ({}),
       notify: vi.fn(),
-      emailSender: fakeEmailSender(vi.fn().mockResolvedValue(undefined)),
+      sendEmail: vi.fn().mockResolvedValue(undefined),
     });
 
     const res = fakeRes();
@@ -101,7 +96,7 @@ describe('login-handlers delivery failure handling', () => {
     const { resendTwoFAEmail } = createLoginHandlers(loginService, {
       buildCookieOptions: () => ({}),
       notify: vi.fn(),
-      emailSender: fakeEmailSender(vi.fn().mockRejectedValue(new Error('invalid API key'))),
+      sendEmail: vi.fn().mockRejectedValue(new Error('invalid API key')),
     });
 
     const res = fakeRes();
@@ -122,7 +117,7 @@ describe('login-handlers delivery failure handling', () => {
     const { resendTwoFAEmail } = createLoginHandlers(loginService, {
       buildCookieOptions: () => ({}),
       notify: vi.fn(),
-      emailSender: fakeEmailSender(vi.fn()),
+      sendEmail: vi.fn(),
     });
 
     const res = fakeRes();

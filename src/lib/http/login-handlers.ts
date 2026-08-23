@@ -1,10 +1,10 @@
 import type { Request, Response, NextFunction, RequestHandler, CookieOptions } from 'express';
 import { LoginService, Status } from '../login';
 import { destroySession, regenerateSession } from './session-utils';
-import { deliverTwoFACode } from '../delivery/two-fa-delivery';
+import { deliverTwoFACode, twoFACodeEmail } from '../delivery/two-fa-delivery';
 import { isSameOriginPath } from '../utils';
-import type { EmailSender } from '../delivery/email-sender';
-import type { DiscordSender } from '../delivery/discord-sender';
+import type { SendEmail } from '../delivery/email-sender';
+import type { SendDiscordDM } from '../delivery/discord-sender';
 
 const DEFAULT_COOKIE_NAMES = {
   twoFAKey: 'TWOFAKEY',
@@ -15,8 +15,8 @@ interface LoginHandlersOptions {
   buildCookieOptions: (extra?: Partial<CookieOptions>) => CookieOptions;
   notify?: (message: string) => void;
   development?: boolean;
-  emailSender?: EmailSender;
-  discordSender?: DiscordSender;
+  sendEmail?: SendEmail;
+  sendDiscordDM?: SendDiscordDM;
   /** Fallback for `resolveRedirect` when the request has no valid `redirect` field. */
   defaultRedirect?: string;
 }
@@ -30,7 +30,7 @@ interface LoginHandlers {
 }
 
 export function createLoginHandlers(loginService: LoginService, opts: LoginHandlersOptions): LoginHandlers {
-  const { buildCookieOptions, notify = () => {}, development, emailSender, discordSender, defaultRedirect = '/' } = opts;
+  const { buildCookieOptions, notify = () => {}, development, sendEmail, sendDiscordDM, defaultRedirect = '/' } = opts;
   const cookies = DEFAULT_COOKIE_NAMES;
 
   // The client can't know in advance where it's safe to land (that's a server-side policy
@@ -76,7 +76,7 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
       notify(`${result.user.username} passed initial auth, 2FA required (${req.ip})`);
 
       try {
-        const delivery = await deliverTwoFACode(result.user, result.code, { development, emailSender, discordSender });
+        const delivery = await deliverTwoFACode(result.user, result.code, { development, sendEmail, sendDiscordDM });
         res.send({ twoFA: true, channel: delivery.channel, emailFallbackAvailable: delivery.emailFallbackAvailable });
       } catch (err) {
         notify(`Failed to deliver 2FA code to ${result.user.username}: ${(err as Error).message}`);
@@ -131,7 +131,7 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
     const twoFAKey = (req.cookies?.[cookies.twoFAKey] as string | undefined) ?? '';
     const pending = await loginService.getPendingTwoFA(twoFAKey);
 
-    if (pending.status !== Status.SUCCESS || !pending.user.email || !emailSender) {
+    if (pending.status !== Status.SUCCESS || !pending.user.email || !sendEmail) {
       res.send({ success: false });
       return;
     }
@@ -140,7 +140,8 @@ export function createLoginHandlers(loginService: LoginService, opts: LoginHandl
       if (development) {
         console.log(`[kaiauth] (dev) resend 2FA code for ${pending.user.username}: ${pending.code}`);
       } else {
-        await emailSender.send(pending.user.email, pending.code);
+        const { subject, body } = twoFACodeEmail(pending.code);
+        await sendEmail(pending.user.email, subject, body);
       }
       notify(`Resent 2FA code via email for ${pending.user.username} (${req.ip})`);
       res.send({ success: true, channel: 'email' });

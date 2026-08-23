@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DiscordSender = void 0;
 const discord_js_1 = require("discord.js");
 /**
- * Sends 2FA codes as Discord DMs using a single persistent bot connection.
+ * Sends Discord DMs using a single persistent bot connection.
  *
  * The bot must share a guild with the target user (or the user must allow
  * DMs from server members), or `send()` will reject with a Discord API
@@ -19,10 +19,10 @@ class DiscordSender {
             this._client.login(config.botToken).catch(reject);
         });
     }
-    async send(discordUserId, code) {
+    async send(discordUserId, message) {
         await this._ready;
         const user = await this._client.users.fetch(discordUserId);
-        await user.send(`Your verification code is: ${code}`);
+        await user.send(message);
     }
 }
 exports.DiscordSender = DiscordSender;
